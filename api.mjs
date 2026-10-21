@@ -1,43 +1,66 @@
-import { loadDotEnv, config } from "./src/config.js";
-import { createPool, migrate } from "./src/db.js";
-import { buildApp } from "./src/app.js";
-import { bootstrapOwner } from "./src/services/bootstrap.js";
-import { expireBadges } from "./src/services/badges.js";
+import { spawn, execFileSync } from "node:child_process";
+import { existsSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
-loadDotEnv();
-const cfg = config();
-const pool = createPool(cfg.databaseUrl);
-const app = await buildApp({ cfg, pool });
+const root = dirname(fileURLToPath(import.meta.url));
+const auto = process.env.AUTO_UPDATE == "1" && existsSync(join(root, ".git"));
+const branch = process.env.BRANCH || "main";
+const every = Math.max(30, Number(process.env.UPDATE_INTERVAL_SECONDS) || 120) * 1000;
+const log = msg => console.log(JSON.stringify({ level: 30, time: Date.now(), msg: `updater: ${msg}` }));
+const git = (...args) => execFileSync("git", args, { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
 
-app.log.info(`database: ${new URL(cfg.databaseUrl).host}`);
-const applied = await migrate(pool);
-if (applied.length) app.log.info({ applied }, "migrations applied");
-await bootstrapOwner(pool, cfg.initialOwnerId, app.log);
-
-const hourly = setInterval(() => expireBadges(pool).catch(e => app.log.error(e)), 3600_000);
-const daily = setInterval(async () => {
+function sync() {
   try {
-    await pool.query("DELETE FROM login_attempts WHERE created_at < now() - interval '30 days'");
-    await pool.query("DELETE FROM email_verification_tokens WHERE expires_at < now() - interval '7 days'");
-    await pool.query("DELETE FROM password_reset_tokens WHERE expires_at < now() - interval '7 days'");
-    await pool.query("DELETE FROM user_sessions WHERE expires_at < now() - interval '30 days' OR revoked_at < now() - interval '30 days'");
-    await pool.query("DELETE FROM notifications WHERE archived_at < now() - interval '90 days' OR created_at < now() - interval '1 year'");
-    await bootstrapOwner(pool, cfg.initialOwnerId, app.log);
+    git("fetch", "--quiet", "origin", branch);
+    const head = git("rev-parse", "HEAD");
+    const target = git("rev-parse", `origin/${branch}`);
+    if (head == target && !git("status", "--porcelain", "--untracked-files=no")) return false;
+    const deps = head != target && git("diff", "--name-only", head, target, "--", "package.json", "package-lock.json") != "";
+    git("reset", "--hard", target);
+    log(`now at ${target.slice(0, 7)} (was ${head.slice(0, 7)})`);
+    if (deps) execFileSync("npm", ["ci", "--omit=dev", "--no-audit", "--no-fund"], { cwd: root, stdio: "inherit" });
+    return true;
   } catch (e) {
-    app.log.error(e, "housekeeping");
+    log(`update failed: ${e.stderr?.toString().trim() || e.message}`);
+    return false;
   }
-}, 24 * 3600_000);
+}
 
-const stop = async () => {
-  clearInterval(hourly);
-  clearInterval(daily);
-  await app.close();
-  await pool.end();
-  process.exit(0);
-};
+let child = null;
+let stopping = false;
+let restarting = false;
+
+function start() {
+  child = spawn(process.execPath, [...process.execArgv, join(root, "server.mjs")], { cwd: root, stdio: ["ignore", "inherit", "inherit"] });
+  child.on("exit", (code, signal) => {
+    child = null;
+    if (stopping) return process.exit(0);
+    if (restarting) {
+      restarting = false;
+      return start();
+    }
+    log(`app stopped (${code ?? signal}), starting again in 5 s`);
+    setTimeout(start, 5000);
+  });
+}
+
+function restart() {
+  if (!child) return start();
+  restarting = true;
+  child.kill("SIGTERM");
+}
+
+function stop() {
+  stopping = true;
+  if (child) child.kill("SIGTERM");
+  else process.exit(0);
+}
+
 process.on("SIGTERM", stop);
 process.on("SIGINT", stop);
 process.stdin.on("data", d => String(d).trim() == "stop" && stop());
 
-await app.listen({ port: cfg.port, host: cfg.host });
-app.log.info(`Orbit API ready on ${cfg.baseUrl}`);
+if (auto) sync();
+start();
+if (auto) setInterval(() => sync() && restart(), every);

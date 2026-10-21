@@ -15,7 +15,7 @@ const api = spawn(process.execPath, [`${root}api.mjs`], {
   cwd: root,
   stdio: "inherit",
   env: { ...process.env, DATABASE_URL: "postgres://postgres:dev-only-password@127.0.0.1:54329/orbit", APP_BASE_URL: "http://localhost:8790",
-    MFA_ENCRYPTION_KEY: process.env.MFA_ENCRYPTION_KEY ?? createHash("sha256").update("orbit-dev-only").digest("hex"), PORT: "8790" },
+    MFA_ENCRYPTION_KEY: process.env.MFA_ENCRYPTION_KEY ?? createHash("sha256").update("orbit-dev-only").digest("hex"), PORT: "8790", AUTO_UPDATE: "0" },
 });
 const stop = async () => {
   api.kill();

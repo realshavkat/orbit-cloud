@@ -21,6 +21,7 @@ export function config(env = process.env) {
     cookieSecure: secure,
     mfaKey: env.MFA_ENCRYPTION_KEY || null,
     downloadsDir: env.DOWNLOADS_DIR || fileURLToPath(new URL("../downloads/", import.meta.url)),
+    installerRepo: env.INSTALLER_REPO === "" ? null : env.INSTALLER_REPO || "realshavkat/orbit",
     trustProxy: env.TRUST_PROXY === "true",
     initialOwnerId: env.INITIAL_OWNER_ID || null,
     mail: {
