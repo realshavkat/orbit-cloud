@@ -36,6 +36,13 @@ export function config(env = process.env) {
       secretKey: env.STRIPE_SECRET_KEY || null,
       webhookSecret: env.STRIPE_WEBHOOK_SECRET || null,
     },
+    // Mozilla accounts: public endpoints, no secret. Client ids whose tokens we accept
+    // (Firefox desktop by default; add the mobile app's id when it exists).
+    mozilla: {
+      oauthUrl: (env.MOZILLA_OAUTH_URL || "https://oauth.accounts.firefox.com").replace(/\/$/, ""),
+      profileUrl: (env.MOZILLA_PROFILE_URL || "https://profile.accounts.firefox.com").replace(/\/$/, ""),
+      clientIds: (env.MOZILLA_CLIENT_IDS || "5882386c6d801776").split(",").map(s => s.trim()).filter(Boolean),
+    },
     turnstileSecret: env.TURNSTILE_SECRET || null,
     turnstileSiteKey: env.TURNSTILE_SITE_KEY || null,
   };

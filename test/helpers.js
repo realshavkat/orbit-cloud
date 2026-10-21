@@ -8,7 +8,7 @@ import { createMailer } from "../src/services/mail.js";
 
 export const WEBHOOK_SECRET = "whsec_test_" + randomBytes(8).toString("hex");
 
-export async function setup({ withStripe = true } = {}) {
+export async function setup({ withStripe = true, mozilla, zenFetch, zenImage = async () => null } = {}) {
   const cfg = config({ ...process.env, APP_BASE_URL: "http://localhost:8790", MFA_ENCRYPTION_KEY: randomBytes(32).toString("hex") });
   cfg.stripe.webhookSecret = WEBHOOK_SECRET;
   const pool = createPool(process.env.DATABASE_URL);
@@ -17,7 +17,7 @@ export async function setup({ withStripe = true } = {}) {
   const mailer = createMailer(cfg, silent);
   // A real Stripe client: signatures are checked for real, no network is used.
   const stripe = withStripe ? new Stripe("sk_test_dummy") : null;
-  const app = await buildApp({ cfg, pool, logger: false, mailer, stripe });
+  const app = await buildApp({ cfg, pool, logger: false, mailer, stripe, mozilla, zenFetch, zenImage });
   await app.ready();
   return { app, pool, cfg, mailer, stripe };
 }

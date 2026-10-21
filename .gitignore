@@ -7,4 +7,4 @@ backups/
 *.dump
 .pwfile
 *.log
-.dev-pg/
+.dev-pg*/

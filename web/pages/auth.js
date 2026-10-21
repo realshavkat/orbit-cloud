@@ -1,15 +1,15 @@
 // Sign-up, sign-in, e-mail verification, password reset, second factor.
-import { h, icon, t, post, get, state, loadMe, errorBox, errorText, field } from "../lib.js";
+import { h, icon, t, post, get, state, loadMe, errorBox, errorText, field, logo } from "../lib.js";
 
 const go = (url, o) => window.orbitNavigate(url, o);
 const USERNAME_RE = /^[A-Za-z0-9_.-]{3,24}$/;
 
 function card(title, sub, ...body) {
-  return h("div", { class: "stack" },
-    h("div", { class: "stack", style: { gap: "6px", textAlign: "center", marginBottom: "8px" } },
-      h("div", { class: "brand", style: { justifyContent: "center" } }, h("span", { class: "dot" })),
-      h("h1", {}, title), sub ? h("p", { class: "muted", style: { margin: 0 } }, sub) : null),
-    h("div", { class: "card stack" }, ...body));
+  return h("div", { class: "stack", style: { gap: "28px" } },
+    h("div", { class: "stack", style: { gap: "10px" } },
+      h("a", { class: "brand", href: "/", "aria-label": "Orbit" }, logo(34)),
+      h("h1", { style: { fontSize: "32px", marginTop: "14px" } }, title), sub ? h("p", { class: "muted" }, sub) : null),
+    h("div", { class: "stack", style: { gap: "20px" } }, ...body));
 }
 
 // After sign-in: back where the visitor was going.
@@ -43,7 +43,8 @@ export async function login({ query }) {
     h("a", { class: "link small", href: "/forgot" }, t("Mot de passe oublié ?", "Forgot password?"))),
   err, submit);
   return card(t("Bon retour", "Welcome back"), t("Connecte-toi à ton compte Orbit.", "Sign in to your Orbit account."),
-    form, h("p", { class: "muted small", style: { textAlign: "center", margin: 0 } }, t("Pas encore de compte ? ", "No account yet? "),
+    form, h("div", { class: "alert" }, icon("refresh-cw"), h("span", { class: "small" },
+      t("Dans Orbit, connecte-toi à Firefox Sync : ton compte Orbit suit automatiquement.", "In Orbit, sign in to Firefox Sync: your Orbit account follows automatically."))), h("p", { class: "muted small", style: { textAlign: "center", margin: 0 } }, t("Pas encore de compte ? ", "No account yet? "),
       h("a", { class: "link", href: `/register${query.next ? `?next=${encodeURIComponent(query.next)}` : ""}` }, t("Créer un compte", "Sign up"))));
 }
 
@@ -210,4 +211,50 @@ export async function mfa({ query }) {
         err.replaceChildren(errorBox(x));
       }
     } }, code, recovery, err, h("button", { class: "btn primary block", type: "submit" }, t("Valider", "Verify")), toggle));
+}
+
+// /connect#code=...: the Orbit browser hands over a signed-in Mozilla account
+// (Firefox Sync). The code is in the fragment, so it never reaches a server log.
+export async function connect() {
+  const code = new URLSearchParams(location.hash.slice(1)).get("code");
+  history.replaceState(null, "", "/connect");
+  if (!code) return card(t("Lien expiré", "Link expired"), t("Reconnecte-toi à Firefox Sync dans Orbit pour réessayer.", "Sign in to Firefox Sync in Orbit again to retry."),
+    h("a", { class: "btn primary block", href: "/login" }, t("Se connecter autrement", "Sign in another way")));
+  const done = async () => {
+    await loadMe();
+    go(state.me ? `/u/${state.me.username}` : "/", { replace: true });
+  };
+  let first;
+  try {
+    first = await post("/auth/mozilla/redeem", { code });
+  } catch (e) {
+    return card(t("Connexion impossible", "Couldn't sign you in"), null, errorBox(e), h("a", { class: "btn block", href: "/login" }, t("Se connecter autrement", "Sign in another way")));
+  }
+  if (first.ok) return void (await done());
+  // First time with this Mozilla account: pick a username.
+  const username = h("input", { class: "input", autocomplete: "username", maxlength: 24, required: true, spellcheck: "false",
+    value: (first.email ?? "").split("@")[0].replace(/[^A-Za-z0-9_.-]/g, "").slice(0, 24) });
+  const terms = h("input", { type: "checkbox", required: true });
+  const err = h("div");
+  const submit = h("button", { class: "btn primary block", type: "submit" }, t("Créer mon compte", "Create my account"));
+  return card(t("Bienvenue sur Orbit", "Welcome to Orbit"),
+    t(`Ton compte Mozilla (${first.email}) devient ton compte Orbit. Choisis ton pseudo.`, `Your Mozilla account (${first.email}) becomes your Orbit account. Pick a username.`),
+    h("form", { class: "stack", onsubmit: async e => {
+      e.preventDefault();
+      if (!USERNAME_RE.test(username.value)) return err.replaceChildren(errorBox({ code: "username_format" }));
+      submit.disabled = true;
+      err.replaceChildren();
+      try {
+        await post("/auth/mozilla/redeem", { code, username: username.value, accept_terms: terms.checked });
+        await done();
+      } catch (x) {
+        err.replaceChildren(errorBox(x));
+      } finally {
+        submit.disabled = false;
+      }
+    } },
+    field(t("Pseudo", "Username"), username, h("div", { class: "hint" }, t("3 à 24 caractères : lettres, chiffres, _ . -", "3 to 24 characters: letters, digits, _ . -"))),
+    h("label", { class: "check" }, terms, h("span", {}, t("J'accepte les ", "I accept the "), h("a", { class: "link", href: "/terms", target: "_blank" }, t("conditions", "terms")),
+      t(" et la ", " and the "), h("a", { class: "link", href: "/privacy", target: "_blank" }, t("politique de confidentialité", "privacy policy")))),
+    err, submit));
 }

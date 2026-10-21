@@ -1,19 +1,35 @@
 // Badge catalog, badge page, authenticity check.
-import { h, icon, t, get, badgeCard, personCard, empty, fmtDate, RARITY, errorText, localBadge } from "../lib.js";
+import { h, icon, t, get, state, personCard, empty, fmtDate, RARITY, errorText, localBadge } from "../lib.js";
 
 const CATEGORY = { official: t("Officiel", "Official"), support: t("Soutien et dons", "Support"), community: t("Communauté", "Community"), seniority: t("Ancienneté", "Seniority"),
   event: t("Événement", "Event"), contribution: t("Contribution", "Contribution"), creator: t("Création de contenu", "Content creation"), beta: t("Bêta-test", "Beta testing"),
   trust: t("Sécurité et confiance", "Security and trust"), special: t("Récompenses spéciales", "Special rewards") };
 
-export async function catalog() {
+export async function catalog({ query }) {
   const { badges } = await get("/badges");
+  const mine = new Set((state.me?.badges ?? []).map(b => b.key));
+  const filter = query.f ?? "";
+  const shown = badges.filter(b => !filter || (filter == "earned" ? mine.has(b.key) : b.category == filter));
   const groups = {};
-  for (const b of badges) (groups[b.category] ??= []).push(b);
-  return [h("div", { class: "page-head" }, h("div", {}, h("h1", {}, t("Badges", "Badges")),
-    h("p", {}, t("Chaque badge correspond à un critère réel. Aucun ne s'achète et aucun ne donne de droits.", "Each badge matches a real criterion. None can be bought and none grants rights.")))),
-  h("div", { class: "stack", style: { gap: "26px" } }, Object.entries(groups).map(([cat, list]) => h("section", { class: "stack" },
-    h("h2", {}, CATEGORY[cat] ?? cat),
-    h("div", { class: "grid cols-3" }, list.map(b => badgeCard(b, { extra: h("span", { class: "faint small" }, b.holders ? `${b.holders} ${t("membre(s)", "member(s)")}` : t("Personne pour l'instant", "Nobody yet")) }))))))];
+  for (const b of shown) (groups[b.category] ??= []).push(b);
+  const cats = [["", t("Tous", "All")], ...(state.me ? [["earned", t("Obtenus", "Earned")]] : []),
+    ...[...new Set(badges.map(b => b.category))].map(c => [c, CATEGORY[c] ?? c])];
+  return h("div", { class: "stack", style: { gap: "36px", maxWidth: "980px" } },
+    h("div", { class: "stack", style: { gap: "12px" } }, h("h1", { style: { fontSize: "44px" } }, "Badges"),
+      h("p", { class: "muted", style: { fontSize: "18px", maxWidth: "60ch" } },
+        t("Chaque badge correspond à un critère réel. Aucun ne s'achète et aucun ne donne de droits.", "Each badge matches a real criterion. None can be bought and none grants rights."),
+        state.me ? h("span", {}, " ", t("Tu en as ", "You have "), h("b", { style: { color: "var(--ink)", fontWeight: 600 } }, `${mine.size} / ${badges.length}`), ".") : null)),
+    h("div", { class: "tabs", role: "tablist" }, cats.map(([k, l]) => h("a", { href: k ? `/badges?f=${k}` : "/badges", role: "tab", "aria-selected": String(k == filter) }, l))),
+    Object.keys(groups).length ? Object.entries(groups).map(([cat, list]) => h("section", {},
+      h("h2", { class: "section-title" }, CATEGORY[cat] ?? cat),
+      h("div", { class: "list" }, list.map(raw => {
+        const b = localBadge(raw);
+        return h("a", { class: "badge-row", href: `/badges/${b.key}` }, h("span", { class: "medal", style: { "--c": b.color } }, icon(b.icon)),
+          h("span", { class: "t" }, h("b", { style: { fontWeight: 600 } }, b.name), h("span", {}, b.description)),
+          h("span", { class: "n hide-sm" }, b.holders ? `${b.holders.toLocaleString()} ${t("membre(s)", b.holders > 1 ? "members" : "member")}` : t("Personne", "Nobody yet")),
+          mine.has(b.key) ? h("span", { class: "row", style: { gap: "6px", color: "var(--ok)", fontSize: "14px", fontWeight: 500, width: "92px", justifyContent: "flex-end" } }, icon("check"), t("Obtenu", "Earned"))
+            : h("span", { class: "faint small", style: { width: "92px", textAlign: "right" } }, RARITY[b.rarity]));
+      })))) : empty("award", t("Aucun badge ici.", "No badge here.")));
 }
 
 export async function detail({ params }) {

@@ -1,5 +1,5 @@
 // Public profile: /u/:name
-import { h, icon, t, get, post, del, state, act, avatar, badgeCard, badgeMini, empty, fmtDate, ago, THEME, confirmDialog, toast, errorText } from "../lib.js";
+import { h, icon, t, get, post, patch, del, state, act, avatar, badgeCard, empty, fmtDate, ago, THEME, confirmDialog, errorText, liquid, localBadge } from "../lib.js";
 
 const go = (url, o) => window.orbitNavigate(url, o);
 
@@ -45,9 +45,9 @@ function relationActions(p, rerender) {
       if (await act(e.target, () => post("/friends/requests", { user_id: p.id }), { ok: t("Demande envoyée", "Request sent") })) rerender();
     } }, icon("user-plus"), t("Ajouter en ami", "Add friend")));
   }
-  out.push(h("div", { class: "row", style: { position: "relative" } }, (() => {
+  out.push(h("div", { style: { position: "relative" } }, (() => {
     let menu;
-    const b = h("button", { class: "icon-btn", "aria-label": t("Plus d'actions", "More actions"), onclick: e => {
+    const b = h("button", { class: "btn", style: { width: "40px", padding: "0" }, "aria-label": t("Plus d'actions", "More actions"), onclick: e => {
       e.stopPropagation();
       if (menu) return menu.remove(), (menu = null);
       menu = h("div", { class: "menu", role: "menu" },
@@ -60,7 +60,7 @@ function relationActions(p, rerender) {
         } }, icon("ban"), t("Bloquer", "Block")));
       b.parentNode.append(menu);
       setTimeout(() => document.addEventListener("click", () => (menu?.remove(), (menu = null)), { once: true }), 0);
-    } }, icon("chevron-down"));
+    } }, icon("ellipsis"));
     return b;
   })()));
   return out;
@@ -69,37 +69,68 @@ function relationActions(p, rerender) {
 const SECTION_TITLES = { badges: t("Badges", "Badges"), sites: t("Sites partagés", "Shared sites"), collections: t("Collections", "Collections"),
   interests: t("Centres d'intérêt", "Interests"), links: t("Liens", "Links") };
 
+const sec = (key, content, more = null) => h("section", { class: "p-section" }, h("header", {}, h("h2", {}, SECTION_TITLES[key]), more), content);
+
+// Main column: badges, sites, collections. Side column: interests, links.
 function section(key, p) {
-  const box = (content) => h("section", { class: "card stack" }, h("h2", {}, SECTION_TITLES[key]), content);
   if (key == "badges") {
     if (!p.badges?.length) return null;
-    return box(h("div", { class: "grid cols-2" }, p.badges.map(b => badgeCard(b, { href: `/award/${b.award_id}`, extra: h("span", { class: "faint small" }, fmtDate(b.awarded_at)) }))));
+    return sec(key, h("div", { class: "badges-row" }, p.badges.map(b => badgeCard(b, { href: `/award/${b.award_id}` }))),
+      h("a", { class: "link small", href: "/badges" }, t("Tous les badges", "All badges")));
   }
   if (key == "sites") {
     if (!p.sites?.length) return null;
-    return box(h("div", {}, p.sites.map(s => h("a", { class: "site-row", href: `/sites/${s.domain}` },
-      h("span", { class: "favicon" }, s.domain[0].toUpperCase()), h("span", { style: { flex: 1 } }, h("b", {}, s.domain), s.note ? h("div", { class: "muted small" }, s.note) : null),
+    return sec(key, h("div", {}, p.sites.map(s => h("a", { class: "site-row", href: `/sites/${s.domain}` },
+      h("span", { class: "favicon" }, s.domain[0].toUpperCase()),
+      h("span", { style: { display: "flex", flexDirection: "column", minWidth: 0 } }, h("b", { style: { fontWeight: 500 } }, s.domain), s.note ? h("span", { class: "faint small" }, s.note) : null),
       icon("chevron-right")))));
   }
   if (key == "collections") {
     if (!p.collections?.length) return null;
-    return box(h("div", { class: "stack" }, p.collections.map(c => h("div", { class: "card", style: { background: "var(--card-2)" } },
-      h("div", { class: "row between" }, h("h3", {}, c.title), state.me && !p.self ? h("button", { class: "btn small", onclick: () => reportDialog("collection", c.id), "aria-label": t("Signaler", "Report") }, icon("flag")) : null),
-      c.description ? h("p", { class: "muted small", style: { margin: "4px 0 8px" } }, c.description) : null,
+    return sec(key, h("div", {}, p.collections.map(c => h("div", { class: "collection" },
+      h("div", { class: "row between" }, h("h3", {}, c.title), state.me && !p.self ? h("button", { class: "icon-btn", onclick: () => reportDialog("collection", c.id), "aria-label": t("Signaler", "Report") }, icon("flag")) : null),
+      c.description ? h("p", { class: "muted small", style: { margin: "4px 0 6px" } }, c.description) : null,
       h("div", {}, c.items.map(i => h("a", { class: "site-row", href: i.url, target: "_blank", rel: "noopener noreferrer nofollow" },
         icon("link"), h("span", { style: { flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, i.title || i.url), icon("external-link"))))))));
   }
   if (key == "interests") {
     if (!p.interests?.length) return null;
-    return box(h("div", { class: "chips" }, p.interests.map(i => h("span", { class: "chip" }, `#${i}`))));
+    return sec(key, h("div", { class: "chips" }, p.interests.map(i => h("span", { class: "chip" }, i))));
   }
   if (key == "links") {
     if (!p.links?.length) return null;
-    return box(h("div", {}, p.links.map(l => h("a", { class: "site-row", href: l.url, target: "_blank", rel: "noopener noreferrer nofollow me" },
-      icon("globe"), h("span", { style: { flex: 1 } }, l.label || new URL(l.url).hostname), icon("external-link")))));
+    return sec(key, h("div", { class: "stack", style: { gap: "8px" } }, p.links.map(l => h("a", { class: "link", href: l.url, target: "_blank", rel: "noopener noreferrer nofollow me" },
+      l.label || new URL(l.url).hostname))));
   }
   return null;
 }
+
+// The bio, editable in place on your own profile.
+function bioBlock(p, rerender) {
+  const view = p.bio ? h("p", { class: "bio" }, p.bio) : null;
+  if (!p.self) return view;
+  const box = h("div", {});
+  const show = () => box.replaceChildren(...(view
+    ? [view, h("button", { class: "bio-add", type: "button", style: { marginTop: "8px" }, onclick: edit }, icon("pencil"), t("Modifier la bio", "Edit bio"))]
+    : [h("button", { class: "bio-add", type: "button", onclick: edit }, icon("plus"), t("Ajouter une bio", "Add a bio"))]));
+  const edit = () => {
+    const area = h("textarea", { class: "input", rows: 3, maxlength: 400, "aria-label": "Bio", placeholder: t("Quelques mots sur toi", "A few words about you") });
+    area.value = p.bio ?? "";
+    const count = h("span", { class: "hint" }, `${area.value.length} / 400`);
+    area.addEventListener("input", () => (count.textContent = `${area.value.length} / 400`));
+    const save = h("button", { class: "btn primary small", type: "submit" }, t("Enregistrer", "Save"));
+    box.replaceChildren(h("form", { class: "bio-edit", onsubmit: async e => {
+      e.preventDefault();
+      if ((await act(save, () => patch("/me/profile", { bio: area.value.trim() || null }), { ok: t("Bio enregistrée", "Bio saved") })) !== undefined) rerender();
+    } }, area, h("div", { class: "row" }, count, h("div", { style: { flex: 1 } }),
+      h("button", { class: "btn quiet small", type: "button", onclick: show }, t("Annuler", "Cancel")), save)));
+    area.focus();
+  };
+  show();
+  return box;
+}
+
+const ROLE_COLORS = { founder: "#f5c518", administrator: "#ff8d97", moderator: "#7fd1ff", developer: "#c4b5ff", verified: "#3dd68c" };
 
 export async function page({ params }) {
   const render = async () => {
@@ -111,30 +142,34 @@ export async function page({ params }) {
     }
     const color = THEME[p.theme_color] ?? THEME.violet;
     const rerender = async () => document.querySelector("main").replaceChildren(await render());
-    const banner = h("div", { class: "profile-banner", style: { "--pc": color } });
+    const banner = h("div", { class: "profile-banner" });
     if (p.banner_url) banner.style.backgroundImage = `url("${p.banner_url}")`;
-    const official = (p.badges ?? []).filter(b => b.official);
-    const featured = (p.badges ?? []).filter(b => b.featured);
-    const head = h("div", { class: "profile-head" }, avatar(p, "avatar lg"),
+    else banner.append(liquid("liquid", { a: color, b: "#0e1a3a" }));
+    const official = (p.badges ?? []).filter(b => b.official).map(localBadge);
+    const counts = [
+      p.friend_count != null ? [p.friend_count, t("amis", "friends")] : null,
+      [p.badges?.length ?? 0, "badges"],
+      p.sites?.length ? [p.sites.length, t("sites partagés", "shared sites")] : null,
+    ].filter(Boolean);
+    const head = h("section", { class: "profile-head", "aria-label": t("Profil", "Profile") }, avatar(p, "avatar lg"),
       h("div", { class: "names" },
-        h("h1", {}, p.display_name || p.username, ...official.map(badgeMini)),
-        h("div", { class: "muted" }, `@${p.username}`, p.created_at ? ` · ${t("membre depuis", "member since")} ${fmtDate(p.created_at)}` : "",
-          p.last_active_at ? ` · ${t("actif", "active")} ${ago(p.last_active_at)}` : "")),
-      h("div", { class: "row wrap" }, p.self ? h("a", { class: "btn", href: "/me" }, icon("pencil"), t("Modifier le profil", "Edit profile")) : null, ...relationActions(p, rerender)));
+        h("h1", {}, p.display_name || p.username, ...official.map(b => h("span", { class: "role-tag", style: { "--c": ROLE_COLORS[b.key] ?? b.color } }, b.name))),
+        h("span", { class: "handle" }, `@${p.username}`, p.created_at ? ` · ${t("Membre depuis", "Member since")} ${fmtDate(p.created_at)}` : "",
+          p.last_active_at ? ` · ${t("actif", "active")} ${ago(p.last_active_at)}` : ""),
+        p.private ? null : bioBlock(p, rerender),
+        p.private ? null : h("div", { class: "counts" }, counts.map(([n, l]) => h("span", {}, h("b", {}, n), ` ${l}`)))),
+      h("div", { class: "actions" }, p.self ? h("a", { class: "btn", href: "/me" }, icon("pencil"), t("Modifier le profil", "Edit profile")) : null, ...relationActions(p, rerender)));
     if (p.private) {
-      return h("div", {}, banner, head, h("div", { class: "card", style: { marginTop: "22px" } },
+      return h("div", {}, banner, head, h("div", { style: { marginTop: "32px" } },
         empty("lock", t("Ce profil est privé.", "This profile is private."), state.me ? null : h("a", { class: "btn small", href: "/login" }, t("Se connecter", "Sign in")))));
     }
     const order = p.section_order ?? ["badges", "sites", "collections", "interests", "links"];
-    const main = order.map(k => section(k, p)).filter(Boolean);
-    const aside = h("aside", { class: "stack" },
-      p.bio ? h("section", { class: "card" }, h("h2", {}, t("À propos", "About")), h("p", { style: { whiteSpace: "pre-wrap", margin: "8px 0 0" } }, p.bio)) : null,
-      featured.length ? h("section", { class: "card stack" }, h("h2", {}, t("Mis en avant", "Featured")), ...featured.map(b => badgeCard(b, { href: `/award/${b.award_id}` }))) : null,
-      h("section", { class: "card stack" },
-        p.friend_count != null ? h("div", { class: "row" }, icon("users"), h("b", {}, p.friend_count), t(" amis", " friends")) : null,
-        h("div", { class: "row muted small" }, icon("award"), `${p.badges.length} badge${p.badges.length > 1 ? "s" : ""}`)));
+    const side = ["interests", "links"];
+    const mainSecs = order.filter(k => !side.includes(k)).map(k => section(k, p)).filter(Boolean);
+    const sideSecs = order.filter(k => side.includes(k)).map(k => section(k, p)).filter(Boolean);
     return h("div", {}, banner, head, h("div", { class: "profile-body" },
-      h("div", { class: "stack" }, main.length ? main : h("div", { class: "card" }, empty("compass", t("Rien à afficher pour l'instant.", "Nothing to show yet.")))), aside));
+      h("div", { class: "main" }, mainSecs.length ? mainSecs : empty("compass", t("Rien à afficher pour l'instant.", "Nothing to show yet."))),
+      sideSecs.length ? h("aside", {}, sideSecs) : null));
   };
   return render();
 }

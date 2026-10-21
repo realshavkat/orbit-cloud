@@ -286,7 +286,22 @@ const PAGES = {
         h("td", {}, s.current ? null : h("button", { class: "btn small danger", onclick: async e => {
           if ((await act(e.target, () => del(`/me/sessions/${s.id}`))) !== undefined) e.target.closest("tr").remove();
         } }, t("Déconnecter", "Sign out"))))))));
-    return [head(t("Sécurité", "Security"), null),
+    const signIn = h("section", { class: "card stack" }, h("h2", {}, t("Connexion", "Sign-in")),
+      h("div", { class: "switch-row", style: { padding: "4px 0" } }, h("span", {}, h("b", {}, t("Compte Mozilla (Firefox Sync)", "Mozilla account (Firefox Sync)")),
+        h("div", { class: "hint" }, me.mozilla_linked
+          ? t("Lié : te connecter à Firefox Sync dans Orbit te connecte ici aussi.", "Linked: signing in to Firefox Sync in Orbit signs you in here too.")
+          : t("Connecte-toi à Firefox Sync dans Orbit pour le lier à ce compte.", "Sign in to Firefox Sync in Orbit to link it to this account."))),
+        h("span", { class: `tag ${me.mozilla_linked ? "ok" : ""}` }, me.mozilla_linked ? t("Lié", "Linked") : t("Non lié", "Not linked"))));
+    if (!me.has_password) {
+      return [head(t("Sécurité", "Security"), null), signIn,
+        h("section", { class: "card stack" }, h("h2", {}, t("Mot de passe", "Password")),
+          h("p", { class: "muted" }, t("Ton compte n'a pas de mot de passe : tu te connectes avec Firefox Sync. Pour en ajouter un, utilise le lien de réinitialisation envoyé par e-mail.",
+            "Your account has no password: you sign in with Firefox Sync. To add one, use the reset link sent by e-mail.")),
+          h("button", { class: "btn", style: { width: "fit-content" }, onclick: e => act(e.target, () => post("/auth/forgot", { email: me.email }), { ok: t("Lien envoyé", "Link sent") }) },
+            icon("mail"), t("Recevoir le lien", "Send me the link"))),
+        h("section", { class: "card stack" }, h("h2", {}, t("Sessions", "Sessions")), sessionsBox)];
+    }
+    return [head(t("Sécurité", "Security"), null), signIn,
       h("section", { class: "card stack" }, h("h2", {}, t("Mot de passe", "Password")),
         h("form", { class: "stack", onsubmit: async e => {
           e.preventDefault();

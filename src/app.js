@@ -10,6 +10,7 @@ import { hashToken } from "./lib/crypto.js";
 import { permissionsOf, rolesOf } from "./services/core.js";
 import { createMailer } from "./services/mail.js";
 import { createStripe } from "./services/payments.js";
+import { createMozillaVerifier } from "./services/mozilla.js";
 import authRoutes from "./routes/auth.js";
 import meRoutes from "./routes/me.js";
 import userRoutes from "./routes/users.js";
@@ -20,11 +21,12 @@ import siteRoutes from "./routes/sites.js";
 import donationRoutes, { webhookRoutes } from "./routes/donations.js";
 import reportRoutes from "./routes/reports.js";
 import adminRoutes from "./routes/admin.js";
+import modRoutes, { modAdminRoutes, createZenFetcher, createZenImageFetcher } from "./routes/mods.js";
 
 export const SESSION_COOKIE = "orbit_session";
 const SAFE = new Set(["GET", "HEAD", "OPTIONS"]);
 
-export async function buildApp({ cfg, pool, logger = true, mailer, stripe }) {
+export async function buildApp({ cfg, pool, logger = true, mailer, stripe, mozilla, zenFetch, zenImage }) {
   const app = Fastify({
     logger: logger && { level: cfg.env == "test" ? "warn" : "info", redact: ["req.headers.authorization", "req.headers.cookie", "res.headers['set-cookie']"] },
     trustProxy: cfg.trustProxy,
@@ -36,6 +38,9 @@ export async function buildApp({ cfg, pool, logger = true, mailer, stripe }) {
   app.decorate("db", pool);
   app.decorate("mailer", mailer ?? createMailer(cfg, app.log));
   app.decorate("stripe", stripe === undefined ? createStripe(cfg) : stripe);
+  app.decorate("mozilla", mozilla ?? createMozillaVerifier(cfg));
+  app.decorate("zenFetch", zenFetch ?? createZenFetcher());
+  app.decorate("zenImage", zenImage ?? createZenImageFetcher());
 
   await app.register(cookie);
   await app.register(rateLimit, { max: 300, timeWindow: "1 minute" });
@@ -82,7 +87,9 @@ export async function buildApp({ cfg, pool, logger = true, mailer, stripe }) {
     if (!SAFE.has(req.method) && !bearer && !req.url.startsWith("/api/v1/webhooks/")) {
       if (req.headers["x-orbit-request"] != "1") throw new ApiError(403, "csrf");
       const origin = req.headers.origin;
-      if (origin && origin != new URL(cfg.baseUrl).origin) throw new ApiError(403, "csrf");
+      // The browser's own call (privileged, no page origin) uses no cookie identity.
+      const noCookieAuth = req.url.split("?")[0] == "/api/v1/auth/mozilla";
+      if (origin && origin != new URL(cfg.baseUrl).origin && !noCookieAuth) throw new ApiError(403, "csrf");
     }
     if (!token) return;
     const { rows: [s] } = await pool.query(
@@ -152,6 +159,8 @@ export async function buildApp({ cfg, pool, logger = true, mailer, stripe }) {
     await instance.register(webhookRoutes, { prefix: "/webhooks" });
     await instance.register(reportRoutes, { prefix: "/reports" });
     await instance.register(adminRoutes, { prefix: "/admin" });
+    await instance.register(modRoutes, { prefix: "/mods" });
+    await instance.register(modAdminRoutes, { prefix: "/admin/mods" });
   };
   await app.register(api, { prefix: "/api/v1" });
 

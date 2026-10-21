@@ -49,12 +49,18 @@ export default async function adminRoutes(app) {
         COUNT(*) FILTER (WHERE email_verified_at IS NOT NULL AND status <> 'deleted')::int AS verified,
         COUNT(*) FILTER (WHERE status = 'suspended')::int AS suspended FROM users`),
       badges: (await db.query(
-        `SELECT b.key, b.name, b.color, COUNT(ub.*)::int AS n FROM badges b LEFT JOIN user_badges ub ON ub.badge_id = b.id AND ub.revoked_at IS NULL
+        `SELECT b.key, b.name, b.color, b.icon, COUNT(ub.*)::int AS n FROM badges b LEFT JOIN user_badges ub ON ub.badge_id = b.id AND ub.revoked_at IS NULL
           GROUP BY b.id ORDER BY n DESC, b.name`)).rows,
       reports_open: (await one("SELECT COUNT(*)::int AS n FROM reports WHERE status IN ('open', 'reviewing')")).n,
       appeals_pending: (await one("SELECT COUNT(*)::int AS n FROM moderation_actions WHERE appeal_status = 'pending'")).n,
       webhooks: await one(`SELECT COUNT(*) FILTER (WHERE status = 'failed')::int AS failed, COUNT(*) FILTER (WHERE status = 'pending')::int AS pending FROM payment_webhook_events`),
       services: { database: true, mail: app.mailer.configured, donations: !!app.stripe },
+      // New accounts per day, last 30 days (UTC), zeros included.
+      signups: (await db.query(
+        `SELECT d::date AS day, COUNT(u.id)::int AS n FROM generate_series(current_date - 29, current_date, interval '1 day') d
+           LEFT JOIN users u ON u.created_at >= d AND u.created_at < d + interval '1 day' AND u.status <> 'deleted'
+          GROUP BY d ORDER BY d`)).rows,
+      mods_pending: (await one("SELECT COUNT(*)::int AS n FROM mod_versions WHERE status = 'pending'")).n,
     };
     if ((await req.auth.perms()).has("donations.read")) {
       // Gross = amount paid; net = minus refunds. Disputed money counts in neither.

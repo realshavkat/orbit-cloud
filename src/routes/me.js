@@ -28,7 +28,9 @@ export default async function meRoutes(app) {
     const { rows: [u] } = await db.query(
       `SELECT u.id, u.username, u.email, u.email_verified_at, u.created_at, u.status,
               p.display_name, p.bio, p.theme_color, p.links, p.section_order, p.avatar_media_id, p.banner_media_id,
-              EXISTS (SELECT 1 FROM user_mfa_methods m WHERE m.user_id = u.id AND m.confirmed_at IS NOT NULL) AS mfa_enabled
+              EXISTS (SELECT 1 FROM user_mfa_methods m WHERE m.user_id = u.id AND m.confirmed_at IS NOT NULL) AS mfa_enabled,
+              EXISTS (SELECT 1 FROM user_credentials c WHERE c.user_id = u.id) AS has_password,
+              EXISTS (SELECT 1 FROM oauth_accounts o WHERE o.user_id = u.id AND o.provider = 'mozilla') AS mozilla_linked
          FROM users u JOIN user_profiles p ON p.user_id = u.id WHERE u.id = $1`, [user.id]);
     const { rows: privacy } = await db.query("SELECT * FROM user_privacy_settings WHERE user_id = $1", [user.id]);
     const { rows: prefs } = await db.query("SELECT notify, email_security, email_news FROM user_preferences WHERE user_id = $1", [user.id]);

@@ -1,8 +1,23 @@
 // Shared helpers for the Orbit community pages. All user text is inserted
 // with textContent (h() never parses HTML), so profiles cannot inject markup.
 
-export const LANG = (navigator.language || "fr").toLowerCase().startsWith("fr") ? "fr" : "en";
+// English by default; the EN / FR switch is remembered in this browser.
+const stored = (() => {
+  try {
+    return localStorage.getItem("orbit.lang");
+  } catch {
+    return null;
+  }
+})();
+export const LANG = stored == "fr" ? "fr" : "en";
 document.documentElement.lang = LANG;
+
+export function setLang(lang) {
+  try {
+    localStorage.setItem("orbit.lang", lang);
+  } catch {}
+  location.reload();
+}
 
 // Error codes from the API, in plain words.
 const ERRORS = {
@@ -27,6 +42,14 @@ const ERRORS = {
     confirm_mismatch: "Le pseudo ne correspond pas.", owner_cannot_delete: "Le compte propriétaire ne peut pas être supprimé.",
     mfa_unavailable: "La validation en deux étapes n'est pas encore configurée sur le serveur.", csrf: "Requête refusée.",
     invalid_input: "Vérifie les champs.", server_error: "Erreur du serveur. Réessaie.", network: "Connexion au serveur impossible.",
+    email_in_use: "Un compte non confirmé utilise cette adresse. Connecte-toi avec ton mot de passe, ou réinitialise-le.",
+    mozilla_already_linked: "Ce compte Orbit est déjà lié à un autre compte Mozilla.", mozilla_token_invalid: "Connexion Mozilla refusée. Reconnecte-toi à Firefox Sync.",
+    mozilla_unreachable: "Les serveurs Mozilla ne répondent pas. Réessaie.", no_password: "Ton compte n'a pas de mot de passe : reconnecte-toi à Firefox Sync dans Orbit pour confirmer.",
+    mod_unsafe: "Le mod n'a pas passé les vérifications.", zip_invalid: "Ce fichier n'est pas un .zip valide.", zip_too_many_files: "Trop de fichiers dans le .zip.",
+    zip_encrypted: "Les .zip protégés par mot de passe ne sont pas acceptés.", zip_unsupported: "Format de compression non pris en charge.", file_too_big: "Fichier trop lourd.",
+    files_missing: "Ajoute le .zip de ton mod.", zen_link_invalid: "Lien de mod Zen invalide.", zen_mod_not_found: "Ce mod Zen est introuvable.", zen_unreachable: "Le site de Zen ne répond pas.",
+    version_exists: "Cette version existe déjà : change le numéro.", version_invalid: "Numéro de version invalide.", name_invalid: "Nom invalide.",
+    note_required: "Une note est obligatoire pour refuser.", images_required: "Ajoute au moins une capture du mod.", too_many_images: "6 images au maximum.", not_pending: "Cette version a déjà été traitée.", mod_removed: "Ce mod a été retiré par l'équipe.", text_long: "Texte trop long.",
   },
   en: {
     invalid_credentials: "Wrong login or password.", invalid_credentials_or_code: "Wrong password or code.",
@@ -49,14 +72,24 @@ const ERRORS = {
     confirm_mismatch: "The username doesn't match.", owner_cannot_delete: "The owner account can't be deleted.",
     mfa_unavailable: "Two-step verification is not set up on the server yet.", csrf: "Request refused.",
     invalid_input: "Check the fields.", server_error: "Server error. Try again.", network: "Can't reach the server.",
+    email_in_use: "An unconfirmed account uses this address. Sign in with your password, or reset it.",
+    mozilla_already_linked: "This Orbit account is already linked to another Mozilla account.", mozilla_token_invalid: "Mozilla sign-in refused. Sign in to Firefox Sync again.",
+    mozilla_unreachable: "Mozilla's servers are not answering. Try again.", no_password: "Your account has no password: sign in to Firefox Sync in Orbit again to confirm.",
+    mod_unsafe: "The mod did not pass the checks.", zip_invalid: "This file is not a valid .zip.", zip_too_many_files: "Too many files in the .zip.",
+    zip_encrypted: "Password-protected .zip files are not accepted.", zip_unsupported: "Unsupported compression format.", file_too_big: "File too large.",
+    files_missing: "Add your mod's .zip.", zen_link_invalid: "Invalid Zen mod link.", zen_mod_not_found: "This Zen mod was not found.", zen_unreachable: "Zen's site is not answering.",
+    version_exists: "This version already exists: change the number.", version_invalid: "Invalid version number.", name_invalid: "Invalid name.",
+    note_required: "A note is required to reject.", images_required: "Add at least one screenshot of the mod.", too_many_images: "6 pictures at most.", not_pending: "This version was already handled.", mod_removed: "This mod was removed by the team.", text_long: "Text too long.",
   },
 };
 
 export const t = (fr, en) => (LANG == "fr" ? fr : en ?? fr);
 export const errorText = code => ERRORS[LANG][code] ?? ERRORS[LANG].server_error;
 
+const SVG_TAGS = new Set(["svg", "use", "path", "g", "defs", "linearGradient", "stop", "filter", "feGaussianBlur", "rect", "line", "text", "circle"]);
+
 export function h(tag, attrs = {}, ...children) {
-  const svg = tag == "svg" || tag == "use";
+  const svg = SVG_TAGS.has(tag);
   const el = svg ? document.createElementNS("http://www.w3.org/2000/svg", tag) : document.createElement(tag);
   for (const [k, v] of Object.entries(attrs ?? {})) {
     if (v == null || v === false) continue;
@@ -111,6 +144,40 @@ export const post = (p, b) => api("POST", p, b ?? {});
 export const patch = (p, b) => api("PATCH", p, b);
 export const put = (p, b) => api("PUT", p, b);
 export const del = p => api("DELETE", p);
+
+// Two soft ribbons of light, drawn behind headings (never behind body text).
+let liquidN = 0;
+export function liquid(cls = "liquid", { a = "#5c7cff", b = "#0e1a3a" } = {}) {
+  const id = `lq${liquidN++}`;
+  return h("svg", { class: cls, viewBox: "0 0 1200 700", preserveAspectRatio: "xMidYMid slice", "aria-hidden": "true" },
+    h("defs", {},
+      h("linearGradient", { id: `${id}a`, x1: "0", y1: "0", x2: "1", y2: "1" }, h("stop", { offset: "0", "stop-color": a }), h("stop", { offset: "1", "stop-color": b, "stop-opacity": "0" })),
+      h("filter", { id: `${id}b`, x: "-30%", y: "-30%", width: "160%", height: "160%" }, h("feGaussianBlur", { stdDeviation: "48" }))),
+    h("g", { filter: `url(#${id}b)`, fill: "none", stroke: `url(#${id}a)`, "stroke-linecap": "round" },
+      h("path", { class: "rib1", d: "M-160 560 C 160 260, 460 200, 620 400 S 980 720, 1360 440", "stroke-width": "170" }),
+      h("path", { class: "rib2", d: "M-120 120 C 260 0, 520 220, 780 90 S 1160 40, 1320 140", "stroke-width": "90", opacity: ".6" })));
+}
+
+export const logo = (size = 28) => h("img", { src: "/assets/logo.svg", alt: "", width: size, height: Math.round(size * 251 / 331) });
+
+// A panel sliding in from the right (admin forms). Resolves when closed.
+export function drawer(title, body, footer = []) {
+  let close;
+  const done = new Promise(r => (close = r));
+  const key = e => e.key == "Escape" && end();
+  const end = () => {
+    bg.remove();
+    document.removeEventListener("keydown", key);
+    close();
+  };
+  const bg = h("div", { class: "drawer-bg", onclick: e => e.target == bg && end() },
+    h("section", { class: "drawer", role: "dialog", "aria-modal": "true", "aria-label": title },
+      h("header", {}, h("h2", {}, title), h("button", { class: "icon-btn", "aria-label": t("Fermer", "Close"), onclick: end }, icon("x"))),
+      h("div", { class: "body" }, body), footer.length ? h("footer", {}, footer) : null));
+  document.addEventListener("keydown", key);
+  document.body.append(bg);
+  return { close: end, done, el: bg };
+}
 
 // ---- session state
 export const state = { me: null, config: null };
@@ -281,7 +348,7 @@ export function badgeCard(b, { href = `/badges/${b.key}`, extra = null } = {}) {
   b = localBadge(b);
   return h("a", { class: "badge", href, "data-rarity": b.rarity, style: { "--c": b.color } },
     h("span", { class: "medal" }, icon(b.icon)),
-    h("span", { class: "t" }, h("b", {}, b.name), h("span", { class: "rarity" }, RARITY[b.rarity]), extra));
+    h("span", { class: "t" }, h("b", {}, b.name), h("span", {}, extra ?? RARITY[b.rarity])));
 }
 
 export function personCard(u, extra = null) {

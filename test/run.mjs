@@ -10,7 +10,9 @@ import { randomBytes } from "node:crypto";
 const dir = mkdtempSync(join(tmpdir(), "orbit-pg-"));
 const port = 20000 + Math.floor(Math.random() * 20000);
 const password = randomBytes(12).toString("hex");
-const server = new EmbeddedPostgres({ databaseDir: dir, user: "postgres", password, port, persistent: false, onLog: () => {} });
+const server = new EmbeddedPostgres({ databaseDir: dir, user: "postgres", password, port, persistent: false, onLog: () => {},
+  // Same as production (db.mjs): UTF-8, C locale. Windows would default to WIN1252.
+  initdbFlags: ["--encoding=UTF8", "--locale=C"] });
 let code = 1;
 try {
   await server.initialise();

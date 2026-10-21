@@ -1,5 +1,5 @@
 // Orbit community: the page shell and the router (paths handled in the browser).
-import { h, icon, t, get, post, state, loadMe, spinner, errorBox, avatar } from "./lib.js";
+import { h, icon, t, get, post, state, loadMe, spinner, errorBox, avatar, logo, LANG, setLang } from "./lib.js";
 import * as auth from "./pages/auth.js";
 import * as profile from "./pages/profile.js";
 import * as me from "./pages/me.js";
@@ -8,6 +8,7 @@ import * as badges from "./pages/badges.js";
 import * as support from "./pages/support.js";
 import * as admin from "./pages/admin.js";
 import * as legal from "./pages/legal.js";
+import * as mods from "./pages/mods.js";
 import { landing } from "./pages/landing.js";
 
 // [pattern, page, options]; :name captures one segment.
@@ -15,6 +16,7 @@ const ROUTES = [
   ["/", landing, { full: true }],
   ["/login", auth.login, { bare: true }],
   ["/register", auth.register, { bare: true }],
+  ["/connect", auth.connect, { bare: true }],
   ["/verify", auth.verify, { bare: true }],
   ["/confirm-email", auth.verify, { bare: true }],
   ["/forgot", auth.forgot, { bare: true }],
@@ -27,15 +29,19 @@ const ROUTES = [
   ["/notifications", social.notifications, { auth: true }],
   ["/sites/:domain", social.site],
   ["/share", social.share, { auth: true }],
+  ["/mods", mods.store],
+  ["/mods/submit", mods.submit, { auth: true }],
+  ["/mods/mine", mods.mine, { auth: true }],
+  ["/mods/:slug", mods.detail],
   ["/badges", badges.catalog],
   ["/badges/:key", badges.detail],
   ["/award/:id", badges.award],
   ["/support", support.page],
   ["/me", me.page, { auth: true }],
   ["/me/:tab", me.page, { auth: true }],
-  ["/admin", admin.page, { auth: true }],
-  ["/admin/:tab", admin.page, { auth: true }],
-  ["/admin/:tab/:id", admin.page, { auth: true }],
+  ["/admin", admin.page, { auth: true, admin: true }],
+  ["/admin/:tab", admin.page, { auth: true, admin: true }],
+  ["/admin/:tab/:id", admin.page, { auth: true, admin: true }],
   ["/terms", legal.terms],
   ["/privacy", legal.privacy],
 ];
@@ -66,6 +72,7 @@ document.addEventListener("click", e => {
   if (!a || a.target || e.ctrlKey || e.metaKey || e.shiftKey || e.button != 0) return;
   const url = new URL(a.href, location.href);
   if (url.origin != location.origin || url.pathname.startsWith("/api/") || url.pathname.startsWith("/assets/")) return;
+  if (url.pathname == location.pathname && url.hash) return;
   e.preventDefault();
   navigate(url.pathname + url.search);
 });
@@ -85,69 +92,69 @@ async function refreshCount() {
 }
 setInterval(refreshCount, 60_000);
 
+export const langSwitch = () => h("div", { class: "lang", role: "group", "aria-label": "Language" },
+  ...[["en", "EN"], ["fr", "FR"]].map(([k, label]) => h("button", { type: "button", "aria-pressed": String(LANG == k), onclick: () => LANG != k && setLang(k) }, label)));
+
+export function accountMenu(anchor) {
+  let menu = null;
+  const close = () => {
+    menu?.remove();
+    menu = null;
+  };
+  return e => {
+    e.stopPropagation();
+    if (menu) return close();
+    const isStaff = state.me.permissions?.length > 0;
+    menu = h("div", { class: "menu", role: "menu" },
+      h("a", { href: `/u/${state.me.username}`, role: "menuitem" }, icon("user"), t("Mon profil", "My profile")),
+      h("a", { href: "/me", role: "menuitem" }, icon("settings"), t("Mon compte", "Account")),
+      h("a", { href: "/friends", role: "menuitem" }, icon("users"), t("Amis", "Friends")),
+      h("a", { href: "/mods/mine", role: "menuitem" }, icon("palette"), t("Mes mods", "My mods")),
+      isStaff ? h("a", { href: "/admin", role: "menuitem" }, icon("layout-dashboard"), t("Administration", "Admin")) : null,
+      h("hr"),
+      h("button", { role: "menuitem", onclick: async () => {
+        await post("/auth/logout").catch(() => {});
+        state.me = null;
+        navigate("/login");
+      } }, icon("log-out"), t("Se déconnecter", "Sign out")));
+    anchor.append(menu);
+    setTimeout(() => document.addEventListener("click", close, { once: true }), 0);
+  };
+}
+
 function topbar(path) {
-  const navLink = (href, ic, label) => h("a", { href, "aria-current": path == href || (href != "/" && path.startsWith(href)) ? "page" : null }, icon(ic), h("span", {}, label));
+  const navLink = (href, label) => h("a", { href, "aria-current": path == href || path.startsWith(`${href}/`) ? "page" : null }, label);
+  const nav = h("nav", { class: "nav", "aria-label": t("Principal", "Main") },
+    navLink("/discover", t("Découvrir", "Discover")), navLink("/mods", "Mods"),
+    navLink("/badges", "Badges"), navLink("/support", t("Soutenir", "Support")));
   const search = h("input", { type: "search", placeholder: t("Rechercher un membre", "Search members"), "aria-label": t("Rechercher", "Search") });
   const form = h("form", { class: "top-search", role: "search", onsubmit: e => (e.preventDefault(), search.value.trim() && navigate(`/search?q=${encodeURIComponent(search.value.trim())}`)) },
     icon("search"), search);
-  const right = h("div", { class: "row" });
+  const right = h("div", { class: "top-right" }, form, langSwitch());
   if (state.me) {
-    let menu = null;
-    const toggle = h("button", { class: "icon-btn", "aria-haspopup": "menu", "aria-label": t("Mon compte", "My account"), style: { width: "auto", padding: "0 4px" } },
-      avatar({ ...state.me, avatar_url: state.me.avatar_media_id ? `/api/v1/users/media/${state.me.avatar_media_id}` : null }, "avatar sm"));
-    const close = () => {
-      menu?.remove();
-      menu = null;
-    };
-    toggle.addEventListener("click", e => {
-      e.stopPropagation();
-      if (menu) return close();
-      const isStaff = state.me.permissions?.length > 0;
-      menu = h("div", { class: "menu", role: "menu" },
-        h("a", { href: `/u/${state.me.username}`, role: "menuitem" }, icon("user"), t("Mon profil", "My profile")),
-        h("a", { href: "/me", role: "menuitem" }, icon("pencil"), t("Modifier le profil", "Edit profile")),
-        h("a", { href: "/friends", role: "menuitem" }, icon("users"), t("Amis", "Friends")),
-        h("a", { href: "/me/badges", role: "menuitem" }, icon("award"), t("Mes badges", "My badges")),
-        h("a", { href: "/me/privacy", role: "menuitem" }, icon("eye"), t("Confidentialité", "Privacy")),
-        h("a", { href: "/me/security", role: "menuitem" }, icon("lock"), t("Sécurité", "Security")),
-        isStaff ? h("a", { href: "/admin", role: "menuitem" }, icon("shield-check"), t("Administration", "Administration")) : null,
-        h("hr"),
-        h("button", { role: "menuitem", onclick: async () => {
-          await post("/auth/logout").catch(() => {});
-          state.me = null;
-          navigate("/login");
-        } }, icon("log-out"), t("Se déconnecter", "Sign out")));
-      toggle.parentNode.style.position = "relative";
-      toggle.parentNode.append(menu);
-      setTimeout(() => document.addEventListener("click", close, { once: true }), 0);
-    });
+    const holder = h("div", { style: { position: "relative" } });
+    holder.append(h("button", { class: "icon-btn", "aria-haspopup": "menu", "aria-label": t("Mon compte", "My account"), style: { width: "auto" }, onclick: accountMenu(holder) },
+      avatar({ ...state.me, avatar_url: state.me.avatar_media_id ? `/api/v1/users/media/${state.me.avatar_media_id}` : null }, "avatar sm")));
     right.append(
       h("a", { class: "icon-btn", href: "/notifications", "aria-label": t("Notifications", "Notifications") }, icon("bell"),
-        h("span", { class: "count", id: "notif-count", hidden: !unread }, String(unread))),
-      h("div", {}, toggle));
+        h("span", { class: "count", id: "notif-count", hidden: !unread }, String(unread))), holder);
   } else {
-    right.append(h("a", { class: "btn small", href: "/login" }, t("Se connecter", "Sign in")),
-      h("a", { class: "btn small primary", href: "/register" }, t("Créer un compte", "Sign up")));
+    right.append(h("a", { class: "btn small quiet", href: "/login" }, t("Se connecter", "Sign in")));
   }
-  return h("header", { class: "top" },
-    h("a", { class: "brand", href: "/" }, h("span", { class: "dot" }), h("span", {}, "Orbit")),
-    h("nav", { class: "nav", "aria-label": t("Principal", "Main") },
-      navLink("/discover", "compass", t("Découvrir", "Discover")),
-      navLink("/badges", "award", t("Badges", "Badges")),
-      navLink("/support", "heart", t("Soutenir", "Support"))),
-    h("div", { class: "grow" }), form, right);
+  const burger = h("button", { class: "icon-btn menu-btn", "aria-label": "Menu", "aria-expanded": "false", onclick: () => {
+    burger.setAttribute("aria-expanded", String(nav.classList.toggle("open")));
+  } }, icon("menu"));
+  return h("header", { class: "top" }, h("div", { class: "top-in" },
+    h("a", { class: "brand", href: "/" }, logo(28), h("span", {}, "Orbit")), nav, h("div", { class: "grow" }), right, burger));
 }
 
 const footer = () => h("footer", {},
-  h("div", { class: "row" }, h("span", { class: "brand" }, h("span", { class: "dot" }), h("span", {}, "Orbit")),
+  h("div", { class: "row" }, h("span", { class: "brand" }, logo(22), h("span", {}, "Orbit")),
     h("span", {}, t("Le navigateur reste gratuit, avec ou sans compte.", "The browser stays free, with or without an account."))),
   h("nav", { class: "row", "aria-label": t("Liens", "Links") },
-    h("a", { href: "/badges" }, t("Badges", "Badges")), h("a", { href: "/support" }, t("Soutenir", "Support")),
+    h("a", { href: "/mods" }, "Mods"), h("a", { href: "/badges" }, "Badges"), h("a", { href: "/support" }, t("Soutenir", "Support")),
     h("a", { href: "/terms" }, t("Conditions", "Terms")), h("a", { href: "/privacy" }, t("Confidentialité", "Privacy")),
     h("a", { href: "https://github.com/realshavkat/orbit", target: "_blank", rel: "noopener" }, "GitHub")));
-
-// The floating bar firms up once the page scrolls.
-addEventListener("scroll", () => document.querySelector(".top")?.classList.toggle("scrolled", scrollY > 20), { passive: true });
 
 let renderSeq = 0;
 export async function render() {
@@ -160,7 +167,8 @@ export async function render() {
     state.config = await get("/config").catch(() => ({}));
   }
   const main = h("main", { class: route?.opts.bare ? "narrow" : route?.opts.full ? "full" : "" }, spinner());
-  document.body.replaceChildren(topbar(path), main, footer());
+  if (route?.opts.admin) document.body.replaceChildren(main);
+  else document.body.replaceChildren(topbar(path), main, footer());
   if (!route) {
     main.replaceChildren(errorBox({ code: "not_found" }));
     return;
@@ -171,13 +179,14 @@ export async function render() {
     const content = await route.page({ params: route.params, query: Object.fromEntries(new URLSearchParams(location.search)), main });
     if (seq != renderSeq) return;
     if (content) main.replaceChildren(...[content].flat());
+    if (route.opts.admin && main.firstElementChild?.classList.contains("admin")) main.replaceWith(main.firstElementChild);
   } catch (e) {
     if (seq != renderSeq) return;
     main.replaceChildren(errorBox(e));
   }
   refreshCount();
-  const h1 = document.querySelector("main h1");
-  document.title = `${h1?.firstChild?.nodeType == 3 ? h1.firstChild.textContent : h1?.textContent ?? "Orbit"} · Orbit`;
+  const h1 = document.querySelector("h1");
+  document.title = path == "/" ? "Orbit" : `${h1?.firstChild?.nodeType == 3 ? h1.firstChild.textContent.trim() : h1?.textContent ?? "Orbit"} · Orbit`;
 }
 
 render();

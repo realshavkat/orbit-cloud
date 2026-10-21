@@ -6,7 +6,8 @@ import { randomBytes } from "node:crypto";
 
 const dir = new URL("../.dev-pg", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
 const fresh = !existsSync(`${dir}/PG_VERSION`);
-const pg = new EmbeddedPostgres({ databaseDir: dir, user: "postgres", password: "dev-only-password", port: 54329, persistent: true, onLog: () => {} });
+const pg = new EmbeddedPostgres({ databaseDir: dir, user: "postgres", password: "dev-only-password", port: 54329, persistent: true, onLog: () => {},
+  initdbFlags: ["--encoding=UTF8", "--locale=C"] });
 if (fresh) await pg.initialise();
 await pg.start();
 if (fresh) await pg.createDatabase("orbit");

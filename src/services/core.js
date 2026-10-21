@@ -25,7 +25,7 @@ export function requirePermission(perms, key) {
   if (!perms.has(key)) throw new ApiError(403, "forbidden");
 }
 
-const NOTIFY_TYPES = ["friend_request", "friend_accepted", "badge", "support_badge", "contribution", "security", "report_update", "news", "moderation"];
+const NOTIFY_TYPES = ["friend_request", "friend_accepted", "badge", "support_badge", "contribution", "security", "report_update", "news", "moderation", "mod_review"];
 
 // Stored server-side so they survive reconnections; the user's preferences can mute a type
 // (security notifications cannot be muted).

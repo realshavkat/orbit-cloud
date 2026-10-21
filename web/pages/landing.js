@@ -1,6 +1,6 @@
 // Landing page: hero, then every Orbit feature told while scrolling, beside a
 // browser mock-up that changes scene with the step in view.
-import { h, icon, t, state } from "../lib.js";
+import { h, icon, t, state, liquid } from "../lib.js";
 
 const DOWNLOAD = "https://github.com/realshavkat/orbit/releases/latest";
 
@@ -115,21 +115,20 @@ export async function landing() {
   const stepEls = steps.map(([id, ic, kicker, title, text], i) => h("article", { class: "step", "data-step": id },
     h("span", { class: "kicker" }, icon(ic), h("span", {}, `${String(i + 1).padStart(2, "0")} · ${kicker}`)),
     h("h3", {}, title), h("p", {}, text)));
-  const ctaJoin = state.me ? h("a", { class: "btn big", href: `/u/${state.me.username}` }, icon("user"), t("Mon profil", "My profile"))
-    : h("a", { class: "btn big", href: "/register" }, icon("users"), t("Rejoindre la communauté", "Join the community"));
+  const ctaJoin = state.me ? h("a", { class: "btn big", href: `/u/${state.me.username}` }, t("Mon profil", "My profile"))
+    : h("a", { class: "btn big", href: "/register" }, t("Rejoindre la communauté", "Join the community"));
 
   const page = h("div", { class: "landing" },
     // ---- hero
     h("section", { class: "hero" },
-      div("orbits", div("ring r1", h("i")), div("ring r2", h("i")), div("ring r3", h("i")), div("core")),
+      liquid("liquid hero-liquid"),
       h("div", { class: "hero-text" },
-        h("span", { class: "pill", "data-reveal": "" }, h("span", { class: "pulse" }), t("Version 158 · gratuit et open source", "Version 158 · free and open source")),
-        h("h1", { "data-reveal": "", style: { "--d": "80ms" } }, t("Le navigateur qui ", "The browser that "), h("span", { class: "grad" }, t("gravite autour de toi.", "orbits around you."))),
-        h("p", { class: "lead", "data-reveal": "", style: { "--d": "160ms" } }, t("Espaces, palette de commandes, vue partagée, verrouillage, Turbo, vie privée. Tout ce qu'il faut, rien qui gêne. Basé sur Firefox, pensé pour Windows.",
-          "Spaces, command palette, split view, lock, Turbo, privacy. Everything you need, nothing in the way. Built on Firefox, made for Windows.")),
+        h("span", { class: "kicker-line", "data-reveal": "" }, t("Navigateur pour Windows · version 158", "Browser for Windows · version 158")),
+        h("h1", { "data-reveal": "", style: { "--d": "80ms" } }, t("Le navigateur qui gravite autour de toi.", "The browser that orbits around you.")),
+        h("p", { class: "lead", "data-reveal": "", style: { "--d": "160ms" } }, t("Espaces, palette de commandes, vue partagée, verrouillage. Ton historique reste sur ton ordinateur. Gratuit, sans compte, basé sur Firefox.",
+          "Spaces, command palette, split view, lock. Your history stays on your computer. Free, no account needed, built on Firefox.")),
         h("div", { class: "hero-cta", "data-reveal": "", style: { "--d": "240ms" } },
-          h("a", { class: "btn primary big", href: DOWNLOAD, target: "_blank", rel: "noopener" }, icon("download"), t("Télécharger pour Windows", "Download for Windows")), ctaJoin),
-        h("div", { class: "hero-note", "data-reveal": "", style: { "--d": "320ms" } }, icon("shield-check"), t("Aucun compte nécessaire. Aucune pub. Aucun suivi.", "No account needed. No ads. No tracking."))),
+          h("a", { class: "btn accent big", href: DOWNLOAD, target: "_blank", rel: "noopener" }, icon("download"), t("Télécharger pour Windows", "Download for Windows")), ctaJoin)),
       h("div", { class: "hero-mock", "data-reveal": "", style: { "--d": "200ms" } }, (() => {
         const m = mock();
         m.classList.add("tilt");
@@ -142,35 +141,39 @@ export async function landing() {
     // ---- scrollytelling
     h("section", { class: "story" },
       h("header", { class: "section-head", "data-reveal": "" }, h("span", { class: "eyebrow" }, t("Fonctionnalités", "Features")),
-        h("h2", {}, t("Fait pour aller ", "Made to go "), h("span", { class: "grad" }, t("plus vite.", "faster."))),
-        h("p", {}, t("Fais défiler : chaque fonction s'allume dans le navigateur à droite.", "Scroll: each feature lights up in the browser on the right."))),
+        h("h2", {}, t("Fait pour aller vite.", "Built for speed.")),
+        h("p", {}, t("Fais défiler : chaque fonction s'allume dans la fenêtre à droite.", "Scroll: each feature lights up in the window on the right."))),
       h("div", { class: "story-grid" }, h("div", { class: "steps" }, ...stepEls), h("div", { class: "stage" }, stage, dots))),
     // ---- more
     h("section", { class: "more" },
-      h("header", { class: "section-head", "data-reveal": "" }, h("span", { class: "eyebrow" }, t("Et aussi", "And also")), h("h2", {}, t("Les détails qui changent tout", "The details that change everything"))),
-      h("div", { class: "more-grid" }, ...MORE().map(([ic, name, text], i) => h("div", { class: "glow-card", "data-reveal": "", style: { "--d": `${(i % 4) * 60}ms` } },
-        div("gc-icon", icon(ic)), h("h3", {}, name), h("p", {}, text))))),
+      h("header", { class: "section-head", "data-reveal": "" }, h("h2", {}, t("Et tous les détails qui comptent.", "And every detail that matters.")),
+        h("p", {}, t("Chaque réglage s'explique, et chaque action a son raccourci.", "Every setting explains itself, and every action has a shortcut."))),
+      h("div", { class: "more-grid" }, ...MORE().map(([ic, name, text], i) => h(i == 0 ? "a" : "div", { class: "detail", href: i == 0 ? "/mods" : null, "data-reveal": "", style: { "--d": `${(i % 4) * 60}ms` } },
+        icon(ic), h("h3", {}, name), h("p", {}, text))))),
     // ---- numbers
     h("section", { class: "numbers" },
-      ...[[0, t("octet d'historique envoyé", "bytes of history sent"), "shield"], [100, t("% gratuit, pour toujours", "% free, forever"), "heart"], [8, t("langues", "languages"), "languages"], [158, t("version de Gecko", "Gecko version"), "rocket"]]
-        .map(([n, label, ic], i) => h("div", { class: "num", "data-reveal": "", style: { "--d": `${i * 90}ms` } }, icon(ic), h("b", { "data-count": n }, "0"), h("span", {}, label)))),
+      ...[[0, t("octet d'historique envoyé à qui que ce soit", "bytes of history sent to anyone")], [4, t("pages côte à côte en vue partagée", "pages side by side in split view")],
+        [8, t("langues, dont le français", "languages, English and French included")], [100, t("% gratuit, avec ou sans compte", "% free, with or without an account")]]
+        .map(([n, label], i) => h("div", { class: "num", "data-reveal": "", style: { "--d": `${i * 90}ms` } }, h("b", { "data-count": n }, "0"), h("span", {}, label)))),
     // ---- community
     h("section", { class: "community" },
       h("div", { class: "community-text", "data-reveal": "" },
         h("span", { class: "eyebrow" }, t("Communauté", "Community")),
-        h("h2", {}, t("Montre ton ", "Show your "), h("span", { class: "grad" }, t("univers.", "universe."))),
-        h("p", {}, t("Un profil, des badges vérifiables, des amis et des collections de sites. Rien n'est partagé sans ton accord : chaque élément a son réglage de visibilité.",
-          "A profile, verifiable badges, friends and collections of sites. Nothing is shared without your consent: every item has its own visibility setting.")),
-        h("div", { class: "row wrap" }, ctaJoin.cloneNode(true), h("a", { class: "btn big ghost", href: "/badges" }, icon("award"), t("Voir les badges", "See the badges")))),
+        h("h2", {}, t("Un profil qui te ressemble.", "A profile that feels like you.")),
+        h("p", {}, t("Badges vérifiables, amis, collections de sites et mods. Tu choisis qui voit chaque partie. Connecte-toi à Firefox Sync dans Orbit et ton compte suit.",
+          "Verified badges, friends, site collections and mods. You choose who sees each part. Sign in to Firefox Sync in Orbit and your account follows.")),
+        h("div", { class: "row wrap" }, state.me ? ctaJoin.cloneNode(true) : h("a", { class: "btn primary big", href: "/register" }, t("Créer mon profil", "Create my profile")),
+          h("a", { class: "btn big quiet", href: "/badges" }, t("Voir les badges →", "See badges →")))),
       h("div", { class: "badge-orbit", "data-reveal": "" },
         ...[["rocket", "#f5c518"], ["shield-check", "#ff5d5d"], ["heart", "#ff6b8a"], ["bug", "#ff6bcb"], ["flask-conical", "#ff9f43"], ["code", "#4f8cff"], ["gem", "#b8e4ff"], ["sparkles", "#a66bff"]]
           .map(([ic, c], i) => h("span", { class: "orb", style: { "--c": c, "--i": i } }, icon(ic))),
         div("orb-core", "S"))),
     // ---- final
     h("section", { class: "final", "data-reveal": "" },
-      h("h2", {}, t("Prêt à décoller ?", "Ready for lift-off?")),
-      h("p", {}, t("Orbit s'installe en une minute et importe tout depuis ton ancien navigateur.", "Orbit installs in a minute and imports everything from your old browser.")),
-      h("a", { class: "btn primary big", href: DOWNLOAD, target: "_blank", rel: "noopener" }, icon("download"), t("Télécharger Orbit", "Download Orbit"))));
+      liquid("liquid"),
+      h("h2", {}, t("Prêt à décoller ?", "Ready for takeoff?")),
+      h("p", {}, t("Une minute pour l'installer. Tes favoris et mots de passe suivent.", "One minute to install. Your bookmarks and passwords come along.")),
+      h("a", { class: "btn accent big", href: DOWNLOAD, target: "_blank", rel: "noopener" }, icon("download"), t("Télécharger Orbit", "Download Orbit"))));
 
   // Scene follows the step closest to the middle of the screen.
   const setScene = id => {
@@ -186,15 +189,7 @@ export async function landing() {
   stepEls.forEach(s => io.observe(s));
   dots.querySelectorAll("i").forEach(d => d.addEventListener("click", () => stepEls.find(s => s.dataset.step == d.dataset.dot)?.scrollIntoView({ block: "center" })));
 
-  // Cards light up where the pointer is; the hero mock-up tilts toward it.
-  page.addEventListener("pointermove", e => {
-    const card = e.target.closest?.(".glow-card");
-    if (card) {
-      const r = card.getBoundingClientRect();
-      card.style.setProperty("--mx", `${e.clientX - r.left}px`);
-      card.style.setProperty("--my", `${e.clientY - r.top}px`);
-    }
-  });
+  // The hero mock-up tilts toward the pointer.
   const tilt = page.querySelector(".mock.tilt");
   page.querySelector(".hero").addEventListener("pointermove", e => {
     const x = e.clientX / innerWidth - .5;

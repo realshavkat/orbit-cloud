@@ -51,8 +51,8 @@ export default async function userRoutes(app) {
     if (!/^[0-9a-f-]{36}$/i.test(req.params.id)) throw new ApiError(404, "not_found");
     const { rows: [m] } = await db.query(
       "SELECT m.mime, m.bytes, m.owner_id, m.kind, m.sha256 FROM media m WHERE m.id = $1", [req.params.id]);
-    if (!m || m.kind == "badge") {
-      if (m?.kind == "badge") return sendMedia(reply, m);
+    if (!m || m.kind == "badge" || m.kind == "mod") {
+      if (m) return sendMedia(reply, m);
       throw new ApiError(404, "not_found");
     }
     const { level } = await visibility(db, viewer(req), m.owner_id);

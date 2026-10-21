@@ -9,17 +9,20 @@ import { SESSION_COOKIE } from "../app.js";
 
 const DAY = 864e5;
 
-export async function createSession(app, req, reply, userId, { remember = false, mfaPassed = true } = {}) {
+export async function createSession(app, req, reply, userId, { remember = false, mfaPassed = true, cookie = true } = {}) {
   const token = newToken();
   const ttl = remember ? 30 * DAY : DAY;
   await app.db.query(
     `INSERT INTO user_sessions (user_id, token_hash, remember, mfa_passed, ip, user_agent, expires_at, reauth_at)
      VALUES ($1, $2, $3, $4, $5, $6, $7, CASE WHEN $4 THEN now() END)`,
     [userId, hashToken(token), remember, mfaPassed, req.ip, String(req.headers["user-agent"] ?? "").slice(0, 300), new Date(Date.now() + (mfaPassed ? ttl : 10 * 60_000))]);
-  reply.setCookie(SESSION_COOKIE, token, {
-    path: "/", httpOnly: true, sameSite: "lax", secure: app.cfg.cookieSecure,
-    ...(remember ? { maxAge: 30 * 24 * 3600 } : {}),
-  });
+  // Apps (mobile, the browser itself) send the token as a Bearer header instead.
+  if (cookie) {
+    reply.setCookie(SESSION_COOKIE, token, {
+      path: "/", httpOnly: true, sameSite: "lax", secure: app.cfg.cookieSecure,
+      ...(remember ? { maxAge: 30 * 24 * 3600 } : {}),
+    });
+  }
   return token;
 }
 
@@ -204,6 +207,8 @@ export default async function authRoutes(app) {
     const keys = [`reauth:${user.id}`];
     if (await tooManyAttempts(db, keys)) throw new ApiError(429, "too_many_attempts");
     const { rows: [c] } = await db.query("SELECT password_hash FROM user_credentials WHERE user_id = $1", [user.id]);
+    // Accounts made with a Mozilla account confirm by signing in again from Orbit.
+    if (!c) throw new ApiError(403, "no_password");
     const { rows: mfa } = await db.query("SELECT 1 FROM user_mfa_methods WHERE user_id = $1 AND confirmed_at IS NOT NULL", [user.id]);
     let ok = await verifyPassword(c.password_hash, req.body.password);
     if (ok && mfa.length) ok = await checkSecondFactor(app, db, user.id, { code: req.body.code });
@@ -211,6 +216,100 @@ export default async function authRoutes(app) {
     if (!ok) throw new ApiError(401, mfa.length ? "invalid_credentials_or_code" : "invalid_credentials");
     await db.query("UPDATE user_sessions SET reauth_at = now() WHERE id = $1", [req.auth.session.id]);
     return { ok: true };
+  });
+
+  // ---- Mozilla account (Firefox Sync)
+  // Signs in, links or creates the Orbit account tied to a verified Mozilla identity.
+  // An unlinked identity goes, in order, to: the Orbit account signed in now, the
+  // account with the same verified e-mail, or a new account (needs a username).
+  async function mozillaSignIn(req, reply, { uid, email }, body, { cookie, current }) {
+    const outcome = await tx(db, async c => {
+      const { rows: [linked] } = await c.query(
+        "SELECT user_id FROM oauth_accounts WHERE provider = 'mozilla' AND provider_user_id = $1", [uid]);
+      if (linked) return { userId: linked.user_id };
+      let userId = current?.session.mfaPassed ? current.user.id : null;
+      if (!userId) {
+        const { rows: [same] } = await c.query("SELECT id, email_verified_at FROM users WHERE email_normalized = $1", [normalizeEmail(email)]);
+        // Anyone can sign up with an address they do not own: only a verified one is trusted.
+        if (same && !same.email_verified_at) throw new ApiError(409, "email_in_use");
+        userId = same?.id ?? null;
+      }
+      let created = false;
+      if (!userId) {
+        if (!body.username) return { needsUsername: true };
+        if (!body.accept_terms) throw bad("terms_required");
+        const p = usernameProblem(body.username);
+        if (p) throw bad(p);
+        const { rows: taken } = await c.query("SELECT 1 FROM users WHERE username_lower = lower($1)", [body.username]);
+        if (taken.length) throw new ApiError(409, "username_taken");
+        const { rows: [u] } = await c.query(
+          "INSERT INTO users (username, email, email_normalized, email_verified_at) VALUES ($1, $2, $3, now()) RETURNING id",
+          [body.username, email.trim(), normalizeEmail(email)]);
+        await c.query("INSERT INTO user_profiles (user_id) VALUES ($1)", [u.id]);
+        await c.query("INSERT INTO user_privacy_settings (user_id) VALUES ($1)", [u.id]);
+        await c.query("INSERT INTO user_preferences (user_id) VALUES ($1)", [u.id]);
+        await c.query("INSERT INTO user_roles (user_id, role_id) SELECT $1, id FROM roles WHERE key = 'user'", [u.id]);
+        userId = u.id;
+        created = true;
+      } else {
+        const { rows: other } = await c.query("SELECT 1 FROM oauth_accounts WHERE provider = 'mozilla' AND user_id = $1", [userId]);
+        if (other.length) throw new ApiError(409, "mozilla_already_linked");
+      }
+      await c.query("INSERT INTO oauth_accounts (user_id, provider, provider_user_id) VALUES ($1, 'mozilla', $2)", [userId, uid]);
+      return { userId, created, linked: !created };
+    });
+    if (outcome.needsUsername) return { ok: false, needs_username: true, email };
+
+    const { rows: [u] } = await db.query(
+      `SELECT u.status, u.suspended_until,
+              EXISTS (SELECT 1 FROM user_mfa_methods m WHERE m.user_id = u.id AND m.confirmed_at IS NOT NULL) AS mfa
+         FROM users u WHERE u.id = $1`, [outcome.userId]);
+    if (u.status == "deleted") throw new ApiError(401, "invalid_credentials");
+    if (u.status == "suspended" && (!u.suspended_until || u.suspended_until > new Date())) {
+      throw new ApiError(403, "account_suspended", undefined, { until: u.suspended_until });
+    }
+    if (outcome.linked) {
+      await securityMail(app, db, outcome.userId, "Un compte Mozilla a été lié à ton compte Orbit. / A Mozilla account was linked to your Orbit account.");
+    }
+    if (current) await db.query("UPDATE user_sessions SET revoked_at = now() WHERE id = $1", [current.session.id]);
+    const token = await createSession(app, req, reply, outcome.userId, { remember: body.remember !== false, mfaPassed: !u.mfa, cookie });
+    return { ok: true, created: !!outcome.created, mfa_required: u.mfa, ...(cookie ? {} : { session: token }) };
+  }
+
+  const mozillaBody = { username: { type: "string", maxLength: 24 }, accept_terms: { type: "boolean" }, remember: { type: "boolean" } };
+
+  // Called by the browser (or a mobile app) with a Mozilla OAuth token.
+  //   client "app": signs in right away and answers with a Bearer session token.
+  //   client "web" (default): answers with a one-time code the browser opens on
+  //   the site (/connect?code=...), so the session lands in the site's cookie.
+  app.post("/mozilla", {
+    ...strict(20),
+    schema: { body: { type: "object", required: ["token"], properties: {
+      token: { type: "string", minLength: 10, maxLength: 4096 }, client: { enum: ["web", "app"] }, ...mozillaBody } } },
+  }, async (req, reply) => {
+    const identity = await app.mozilla(req.body.token);
+    // Cookies are ignored here (this call skips the Origin check): only a Bearer session links.
+    const bearer = /^Bearer /.test(req.headers.authorization ?? "") ? req.auth : null;
+    if (req.body.client == "app") return mozillaSignIn(req, reply, identity, req.body, { cookie: false, current: bearer });
+    const code = newToken();
+    await db.query("DELETE FROM auth_handoffs WHERE expires_at < now()");
+    await db.query(
+      "INSERT INTO auth_handoffs (token_hash, provider, provider_user_id, email, expires_at) VALUES ($1, 'mozilla', $2, $3, now() + interval '10 minutes')",
+      [hashToken(code), identity.uid, identity.email]);
+    return { ok: true, code };
+  });
+
+  // The site side of the hand-off. Not spent while a username is still needed.
+  app.post("/mozilla/redeem", {
+    ...strict(30),
+    schema: { body: { type: "object", required: ["code"], properties: { code: { type: "string", maxLength: 100 }, ...mozillaBody } } },
+  }, async (req, reply) => {
+    const { rows: [h] } = await db.query(
+      "SELECT provider_user_id, email FROM auth_handoffs WHERE token_hash = $1 AND used_at IS NULL AND expires_at > now()", [hashToken(req.body.code)]);
+    if (!h) throw bad("token_invalid");
+    const out = await mozillaSignIn(req, reply, { uid: h.provider_user_id, email: h.email }, req.body, { cookie: true, current: req.auth });
+    if (out.ok) await db.query("UPDATE auth_handoffs SET used_at = now() WHERE token_hash = $1", [hashToken(req.body.code)]);
+    return out;
   });
 
   app.post("/logout", async (req, reply) => {
@@ -252,7 +351,10 @@ export default async function authRoutes(app) {
       const { rows: [u] } = await c.query("SELECT username, email FROM users WHERE id = $1", [t.user_id]);
       const p = passwordProblem(req.body.password, u);
       if (p) throw bad(p);
-      await c.query("UPDATE user_credentials SET password_hash = $2, password_changed_at = now() WHERE user_id = $1",
+      // Also how an account made with a Mozilla account gets its first password.
+      await c.query(
+        `INSERT INTO user_credentials (user_id, password_hash) VALUES ($1, $2)
+         ON CONFLICT (user_id) DO UPDATE SET password_hash = EXCLUDED.password_hash, password_changed_at = now()`,
         [t.user_id, await hashPassword(req.body.password)]);
       // Every other reset link and every session ends with the old password.
       await c.query("UPDATE password_reset_tokens SET used_at = now() WHERE user_id = $1 AND used_at IS NULL", [t.user_id]);
