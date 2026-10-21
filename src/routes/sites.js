@@ -98,7 +98,7 @@ export default async function siteRoutes(app) {
       throw e;
     }
     const { rows: presence } = await db.query(
-      `SELECT u.id, sp.seen_at > now() - interval '5 minutes' AS here FROM site_presence sp
+      `SELECT u.id, sp.seen_at, sp.seen_at > now() - interval '5 minutes' AS here FROM site_presence sp
          JOIN users u ON u.id = sp.user_id JOIN user_privacy_settings s ON s.user_id = u.id
         WHERE sp.domain = $1 AND sp.seen_at > now() - interval '7 days' AND s.share_presence AND ${visible}
         ORDER BY sp.seen_at DESC LIMIT 120`, [domain, me.id]);
@@ -114,7 +114,9 @@ export default async function siteRoutes(app) {
       cards(db, presence.filter(r => !r.here).map(r => r.id), me.id),
       cards(db, shares.map(r => r.id), me.id),
     ]);
-    return { domain, here, recent, favorites, sharing_presence: mine.share_presence, shared_by_me: mine.shared };
+    const seen = new Map(presence.map(r => [r.id, r.seen_at]));
+    const stamp = list => list.map(c => ({ ...c, seen_at: seen.get(c.id) }));
+    return { domain, here: stamp(here), recent: stamp(recent), favorites, sharing_presence: mine.share_presence, shared_by_me: mine.shared };
   });
 
   const collectionBody = { type: "object", properties: {
