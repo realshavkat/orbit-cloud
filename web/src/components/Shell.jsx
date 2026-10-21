@@ -161,7 +161,7 @@ export function Topbar() {
     document.addEventListener("keydown", key);
     return () => document.removeEventListener("keydown", key);
   }, []);
-  const nav = [["/forum", "Forum"], ["/mods", "Mods"], ["/discover", t("Membres", "People")], ["/badges", "Badges"], ["/beta", t("Bêta", "Beta")], ["/support", t("Soutenir", "Support")]];
+  const nav = [["/forum", "Forum"], ["/mods", "Mods"], ["/discover", t("Membres", "People")], ["/badges", "Badges"], ["/support", t("Soutenir", "Support")]];
   return (
     <header className={`top${scrolled ? " scrolled" : ""}`}>
       <div className="top-in">
@@ -175,6 +175,7 @@ export function Topbar() {
             <Icon name="search" /><span>{t("Rechercher", "Search")}</span><kbd>Ctrl K</kbd>
           </button>
           <LangSwitch />
+          <Link className="btn small accent download-btn" to="/beta"><Icon name="download" /><span>{t("Télécharger", "Download")}</span></Link>
           {me ? (
             <>
               <Link className="icon-btn" to="/notifications" aria-label="Notifications">
@@ -185,7 +186,6 @@ export function Topbar() {
           ) : (
             <>
               <Link className="btn small quiet" to="/login">{t("Se connecter", "Sign in")}</Link>
-              <Link className="btn small primary hide-sm" to="/beta">{t("Obtenir Orbit", "Get Orbit")}</Link>
             </>
           )}
         </div>
@@ -203,7 +203,7 @@ export const Footer = () => (
       <p className="faint small">{t("Bêta pour Windows. Gratuit pour tous à la version 1.0.", "Beta for Windows. Free for everyone at version 1.0.")}</p>
     </div>
     <nav className="foot-cols" aria-label={t("Liens", "Links")}>
-      <div><h3>{t("Produit", "Product")}</h3><Link to="/beta">{t("Obtenir la bêta", "Get the beta")}</Link><Link to="/#features">{t("Fonctionnalités", "Features")}</Link><Link to="/mods">Mods</Link></div>
+      <div><h3>{t("Produit", "Product")}</h3><Link to="/beta">{t("Télécharger", "Download")}</Link><Link to="/#features">{t("Fonctionnalités", "Features")}</Link><Link to="/mods">Mods</Link></div>
       <div><h3>Forum</h3><Link to="/forum">{t("Discussions", "Discussions")}</Link><Link to="/forum/suggestions">Suggestions</Link><Link to="/forum/c/help">{t("Aide", "Help")}</Link></div>
       <div><h3>{t("Communauté", "Community")}</h3><Link to="/discover">{t("Membres", "People")}</Link><Link to="/badges">Badges</Link><Link to="/support">{t("Soutenir", "Support")}</Link></div>
       <div><h3>Orbit</h3><Link to="/terms">{t("Conditions", "Terms")}</Link><Link to="/privacy">{t("Confidentialité", "Privacy")}</Link><a href="https://github.com/realshavkat/orbit" target="_blank" rel="noopener">GitHub</a></div>

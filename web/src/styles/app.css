@@ -609,3 +609,9 @@ footer.foot { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 2
 @media (max-width: 640px) { .faq .facts > div { grid-template-columns: 1fr; } }
 .search-btn kbd { height: 28px; padding: 0 8px; border-radius: 6px; font-size: 11.5px; }
 .panel > h2 { font-size: 15px; }
+
+.download-btn { position: relative; gap: 7px; padding: 0 14px; box-shadow: inset 0 1px 0 rgb(255 255 255 / .2), 0 0 0 1px rgb(124 92 255 / .55), 0 8px 24px -8px rgb(124 92 255 / .8); }
+.download-btn .i { width: 15px; height: 15px; transition: transform .25s var(--ease); }
+.download-btn:hover .i { transform: translateY(2px); }
+.download-btn[aria-current] { background: var(--accent-2); }
+@media (max-width: 760px) { .download-btn span { display: none; } .download-btn { width: 34px; padding: 0; } }

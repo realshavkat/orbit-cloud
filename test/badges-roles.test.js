@@ -164,4 +164,7 @@ test("rename: members change their own @, admins change someone else's with a re
   assert.equal((await u.get("/api/v1/me")).body.username, name);
   assert.equal((await admin.post(`/api/v1/admin/users/${u.id}/username`, { username: admin.username, reason: "clash" })).body.error, "username_taken");
   assert.equal((await admin.post(`/api/v1/admin/users/${u.id}/username`, { username: "a", reason: "bad" })).body.error, "username_format");
+  const mine = `${name}_me`.slice(0, 24);
+  assert.equal((await admin.post(`/api/v1/admin/users/${admin.id}/username`, { username: mine, reason: "my own" })).status, 200, "staff can rename themself");
+  assert.equal((await admin.get("/api/v1/me")).body.username, mine);
 });

@@ -156,7 +156,7 @@ export default async function adminRoutes(app) {
 
   app.post("/users/:id/username", { schema: { ...idParam, body: reasonBody({ username: { type: "string", maxLength: 24 } }, ["username", "reason"]) } }, async (req) => {
     await perm(req, "users.rename");
-    await outrank(req, req.params.id);
+    if (req.params.id != req.auth.user.id) await outrank(req, req.params.id);
     const p = usernameProblem(req.body.username);
     if (p) throw bad(p);
     await tx(db, async c => {
