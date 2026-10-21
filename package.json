@@ -1,0 +1,29 @@
+{
+  "name": "orbit-cloud",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Orbit community service: accounts, profiles, badges, friends, donations and administration.",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node api.mjs",
+    "db": "node db.mjs",
+    "migrate": "node scripts/migrate.mjs",
+    "test": "node test/run.mjs"
+  },
+  "license": "MPL-2.0",
+  "dependencies": {
+    "@fastify/cookie": "^11.1.3",
+    "@fastify/multipart": "^9.4.0",
+    "@fastify/rate-limit": "^10.3.0",
+    "@fastify/static": "^8.3.0",
+    "argon2": "^0.45.1",
+    "embedded-postgres": "^18.4.0-beta.17",
+    "fastify": "^5.12.7",
+    "nodemailer": "^7.0.13",
+    "pg": "^8.23.1",
+    "stripe": "^19.3.0"
+  }
+}
