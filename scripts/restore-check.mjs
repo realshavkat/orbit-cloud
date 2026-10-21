@@ -4,7 +4,6 @@
 import { readdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { spawnSync } from "node:child_process";
-import { createRequire } from "node:module";
 import pg from "pg";
 import { loadDotEnv } from "../src/config.js";
 
@@ -12,9 +11,8 @@ loadDotEnv();
 const ROOT = join(dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1")), "..");
 const PORT = Number(process.env.SERVER_PORT || process.env.PG_PORT || 5432);
 const SUPER = process.env.PG_SUPERUSER_PASSWORD;
-const require = createRequire(import.meta.url);
 const pkg = `@embedded-postgres/${process.platform == "win32" ? "windows" : process.platform}-${process.arch}`;
-const bin = name => join(dirname(require.resolve(`${pkg}/package.json`)), "native", "bin", process.platform == "win32" ? `${name}.exe` : name);
+const bin = name => join(ROOT, "node_modules", pkg, "native", "bin", process.platform == "win32" ? `${name}.exe` : name);
 
 const dumps = readdirSync(join(ROOT, "backups")).filter(f => f.endsWith(".dump")).sort();
 if (!dumps.length) throw new Error("no dump in ./backups (type `backup` in the console first)");

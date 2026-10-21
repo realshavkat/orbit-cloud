@@ -12,7 +12,6 @@ import { existsSync, mkdirSync, readdirSync, rmSync, readFileSync, statSync } fr
 import { readFile, symlink } from "node:fs/promises";
 import { join, dirname, relative } from "node:path";
 import { spawn } from "node:child_process";
-import { createRequire } from "node:module";
 import pg from "pg";
 import { loadDotEnv } from "./src/config.js";
 
@@ -29,9 +28,8 @@ if (!SUPER || SUPER.length < 24 || !APP || APP.length < 24) {
 }
 
 // The binaries for this platform, from the embedded-postgres package.
-const require = createRequire(import.meta.url);
 const pkg = `@embedded-postgres/${process.platform == "win32" ? "windows" : process.platform}-${process.arch}`;
-const NATIVE = join(dirname(require.resolve(`${pkg}/package.json`)), "native");
+const NATIVE = join(ROOT, "node_modules", pkg, "native");
 const bin = name => join(NATIVE, "bin", process.platform == "win32" ? `${name}.exe` : name);
 
 // npm may skip the package's install script; its library links are rebuilt here.
