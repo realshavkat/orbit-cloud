@@ -21,6 +21,7 @@ const releases = setInterval(installer, 15 * 60_000);
 const daily = setInterval(async () => {
   try {
     await pool.query("DELETE FROM login_attempts WHERE created_at < now() - interval '30 days'");
+    await pool.query("DELETE FROM site_presence WHERE seen_at < now() - interval '7 days'");
     await pool.query("DELETE FROM email_verification_tokens WHERE expires_at < now() - interval '7 days'");
     await pool.query("DELETE FROM password_reset_tokens WHERE expires_at < now() - interval '7 days'");
     await pool.query("DELETE FROM user_sessions WHERE expires_at < now() - interval '30 days' OR revoked_at < now() - interval '30 days'");

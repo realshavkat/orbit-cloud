@@ -62,6 +62,61 @@ export default async function siteRoutes(app) {
     return { domain, count: rows.length, members: await cards(db, rows.map(r => r.id), me), shared_by_me: mine };
   });
 
+  const visible = `u.status = 'active' AND NOT u.profile_hidden AND s.profile_public AND NOT s.social_disabled AND u.id <> $2
+    AND NOT EXISTS (SELECT 1 FROM user_blocks b WHERE (b.blocker_id = u.id AND b.blocked_id = $2) OR (b.blocker_id = $2 AND b.blocked_id = u.id))`;
+
+  app.post("/presence", { config: { rateLimit: { max: 240, timeWindow: "10 minutes" } },
+    schema: { body: { type: "object", required: ["domain"], properties: { domain: { type: "string", maxLength: 300 } } } } }, async (req) => {
+    const me = app.user(req);
+    const { rows: [p] } = await db.query("SELECT share_presence, social_disabled FROM user_privacy_settings WHERE user_id = $1", [me.id]);
+    if (!p.share_presence || p.social_disabled) throw new ApiError(403, "presence_disabled");
+    let domain;
+    try {
+      domain = cleanDomain(req.body.domain);
+    } catch (e) {
+      if (e.code == "domain_sensitive") return { ok: false, sensitive: true };
+      throw e;
+    }
+    await db.query(`INSERT INTO site_presence (user_id, domain) VALUES ($1, $2)
+      ON CONFLICT (user_id, domain) DO UPDATE SET seen_at = now()`, [me.id, domain]);
+    return { ok: true };
+  });
+
+  app.delete("/presence", async (req) => {
+    const me = app.user(req);
+    await db.query("DELETE FROM site_presence WHERE user_id = $1", [me.id]);
+    return { ok: true };
+  });
+
+  app.get("/people", { config: { rateLimit: { max: 240, timeWindow: "10 minutes" } } }, async (req) => {
+    const me = app.user(req);
+    let domain;
+    try {
+      domain = cleanDomain(req.query.domain);
+    } catch (e) {
+      if (e.code == "domain_sensitive") return { domain: null, sensitive: true, here: [], recent: [], favorites: [] };
+      throw e;
+    }
+    const { rows: presence } = await db.query(
+      `SELECT u.id, sp.seen_at > now() - interval '5 minutes' AS here FROM site_presence sp
+         JOIN users u ON u.id = sp.user_id JOIN user_privacy_settings s ON s.user_id = u.id
+        WHERE sp.domain = $1 AND sp.seen_at > now() - interval '7 days' AND s.share_presence AND ${visible}
+        ORDER BY sp.seen_at DESC LIMIT 120`, [domain, me.id]);
+    const { rows: shares } = await db.query(
+      `SELECT u.id FROM shared_sites ss JOIN users u ON u.id = ss.user_id JOIN user_privacy_settings s ON s.user_id = u.id
+        WHERE ss.domain = $1 AND s.share_sites_enabled AND s.show_sites AND ${visible}
+        ORDER BY ss.created_at DESC LIMIT 120`, [domain, me.id]);
+    const { rows: [mine] } = await db.query(
+      `SELECT s.share_presence, EXISTS (SELECT 1 FROM shared_sites WHERE user_id = $1 AND domain = $2) AS shared
+         FROM user_privacy_settings s WHERE s.user_id = $1`, [me.id, domain]);
+    const [here, recent, favorites] = await Promise.all([
+      cards(db, presence.filter(r => r.here).map(r => r.id), me.id),
+      cards(db, presence.filter(r => !r.here).map(r => r.id), me.id),
+      cards(db, shares.map(r => r.id), me.id),
+    ]);
+    return { domain, here, recent, favorites, sharing_presence: mine.share_presence, shared_by_me: mine.shared };
+  });
+
   const collectionBody = { type: "object", properties: {
     title: { type: "string", maxLength: 60 }, description: { type: ["string", "null"], maxLength: 280 }, public: { type: "boolean" },
     items: { type: "array", maxItems: 50, items: { type: "object", required: ["url"], properties: { url: { type: "string" }, title: { type: ["string", "null"] } } } },

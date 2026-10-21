@@ -7,7 +7,7 @@ import { audit } from "../services/core.js";
 import { sendVerification, securityMail, clearSessionCookie } from "./auth.js";
 
 const PRIVACY_KEYS = ["profile_public", "show_badges", "show_activity", "show_collections", "show_interests", "show_sites", "show_friend_count",
-  "allow_friend_requests", "discoverable", "share_sites_enabled", "show_stats", "social_disabled"];
+  "allow_friend_requests", "discoverable", "share_sites_enabled", "show_stats", "social_disabled", "share_presence"];
 const SECTIONS = ["badges", "sites", "collections", "interests", "links"];
 
 export function sniffImage(buf) {
@@ -123,6 +123,7 @@ export default async function meRoutes(app) {
     if (!keys.length) return { ok: true };
     await db.query(`UPDATE user_privacy_settings SET ${keys.map((k, i) => `${k} = $${i + 2}`).join(", ")}, updated_at = now() WHERE user_id = $1`,
       [user.id, ...keys.map(k => req.body[k])]);
+    if (req.body.share_presence === false || req.body.social_disabled === true) await db.query("DELETE FROM site_presence WHERE user_id = $1", [user.id]);
     return { ok: true };
   });
 
