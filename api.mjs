@@ -10,6 +10,7 @@ const cfg = config();
 const pool = createPool(cfg.databaseUrl);
 const app = await buildApp({ cfg, pool });
 
+app.log.info(`database: ${new URL(cfg.databaseUrl).host}`);
 const applied = await migrate(pool);
 if (applied.length) app.log.info({ applied }, "migrations applied");
 await bootstrapOwner(pool, cfg.initialOwnerId, app.log);

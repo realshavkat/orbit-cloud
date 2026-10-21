@@ -6,7 +6,7 @@ pg.types.setTypeParser(20, v => Number(v));
 
 export function createPool(url) {
   if (!url) throw new Error("DATABASE_URL is not set");
-  return new pg.Pool({ connectionString: url, max: 10, idleTimeoutMillis: 30_000 });
+  return new pg.Pool({ connectionString: url, max: 10, idleTimeoutMillis: 30_000, connectionTimeoutMillis: 10_000 });
 }
 
 // Runs fn(client) in one transaction; rolls back on any error.

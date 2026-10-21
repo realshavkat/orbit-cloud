@@ -160,7 +160,9 @@ if (existsSync(pid)) {
 }
 startPostgres();
 await ensureAppDatabase();
-console.log(`Orbit PostgreSQL ready on port ${PORT}${fresh ? " (new cluster)" : ""}`);
+const { networkInterfaces } = await import("node:os");
+const addrs = Object.values(networkInterfaces()).flat().filter(a => a.family == "IPv4" && !a.internal).map(a => a.address);
+console.log(`Orbit PostgreSQL ready on port ${PORT}${fresh ? " (new cluster)" : ""}; container address ${addrs.join(", ")}`);
 
 const msToNight = () => {
   const n = new Date();
