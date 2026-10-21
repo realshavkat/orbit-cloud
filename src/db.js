@@ -6,7 +6,10 @@ pg.types.setTypeParser(20, v => Number(v));
 
 export function createPool(url) {
   if (!url) throw new Error("DATABASE_URL is not set");
-  return new pg.Pool({ connectionString: url, max: 10, idleTimeoutMillis: 30_000, connectionTimeoutMillis: 10_000 });
+  const pool = new pg.Pool({ connectionString: url, max: 10, idleTimeoutMillis: 30_000, connectionTimeoutMillis: 10_000 });
+  // A database restart drops idle connections: log it, the pool reconnects on the next query.
+  pool.on("error", e => console.error("database connection lost:", e.message));
+  return pool;
 }
 
 // Runs fn(client) in one transaction; rolls back on any error.

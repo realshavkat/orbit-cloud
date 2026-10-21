@@ -14,7 +14,7 @@ service is down, browsing is not affected.
 
 ```sh
 npm install
-npm test            # starts a throwaway PostgreSQL, runs the 49 tests
+npm test            # starts a throwaway PostgreSQL, runs the 50 tests
 node scripts/dev.mjs  # PostgreSQL in ./.dev-pg + API on http://localhost:8790
 ```
 
@@ -105,15 +105,22 @@ Two servers on the Node.js egg, both cloning this repository:
 
 The database server creates its cluster on first start (`./pgdata`), the `orbit` database and the
 `orbit` role (no superuser, no CREATEDB, owner of its database only, 30 connections max), allows
-connections only from private networks with scram-sha-256, and writes a dump every night at 03:00 UTC
-in `./backups` (14 kept). Type `backup` in its console for an immediate dump.
+connections only from private networks with scram-sha-256, and writes a backup every night at
+03:00 UTC in `./backups` (14 kept). Type `backup` in its console for an immediate one.
 
-**Restore test**: in the database server's console directory, `node scripts/restore-check.mjs`
-restores the newest dump into a scratch database, prints row counts and drops it.
+The API reaches the database through Docker's private network, by the database container's name
+(its Pelican server UUID) and the database port. The database allocation is bound to the node's
+internal bridge address, so the port is never published on the public IP.
 
-**Restore for real**: stop the API, then
-`pg_restore -h 127.0.0.1 -p <port> -U postgres -d orbit --clean --if-exists backups/<file>.dump`
-(the binaries are in `node_modules/@embedded-postgres/linux-x64/native/bin`), start the API.
+Backups are logical (`src/backup.js`): every table copied with `COPY` and gzipped, with the list of
+applied migrations. The portable PostgreSQL has no `pg_dump`; this needs none.
+
+**Restore test**: type `restore-check` in the database server's console: the newest backup is loaded
+into a scratch database, row counts are printed, the scratch database is dropped.
+
+**Restore for real**: stop the API; in the database server, run
+`CONFIRM_RESTORE=orbit node scripts/restore-check.mjs <backup-folder> --into-orbit` (it empties
+`orbit`, replays the migrations, loads the data, gives the tables back to `orbit`); start the API.
 Also download `backups/` regularly (or use Pelican backups) so a copy lives off the node.
 
 **Update**: push to `main`, restart the server: it runs `git pull`, `npm ci` and the migrations

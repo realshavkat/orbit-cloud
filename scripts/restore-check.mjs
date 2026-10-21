@@ -1,39 +1,46 @@
-// Restore test: loads the newest dump of ./backups into a scratch database,
+// Restore test: loads the newest backup of ./backups into a scratch database,
 // counts the rows of the main tables, then drops the scratch database.
-// Run on the database server: node scripts/restore-check.mjs
-import { readdirSync } from "node:fs";
+// On the database server: type `restore-check` in the console.
+//
+// Real restore (API stopped): CONFIRM_RESTORE=orbit node scripts/restore-check.mjs <backup-folder> --into-orbit
+// empties the "orbit" database first, then loads the backup into it.
 import { join, dirname } from "node:path";
-import { spawnSync } from "node:child_process";
 import pg from "pg";
 import { loadDotEnv } from "../src/config.js";
+import { restore, listBackups } from "../src/backup.js";
 
 loadDotEnv();
 const ROOT = join(dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1")), "..");
 const PORT = Number(process.env.SERVER_PORT || process.env.PG_PORT || 5432);
-const SUPER = process.env.PG_SUPERUSER_PASSWORD;
-const pkg = `@embedded-postgres/${process.platform == "win32" ? "windows" : process.platform}-${process.arch}`;
-const bin = name => join(ROOT, "node_modules", pkg, "native", "bin", process.platform == "win32" ? `${name}.exe` : name);
+const conn = db => ({ host: "127.0.0.1", port: PORT, user: "postgres", password: process.env.PG_SUPERUSER_PASSWORD, database: db });
+const into = process.argv.includes("--into-orbit");
+const name = process.argv.slice(2).find(a => !a.startsWith("--")) ?? listBackups(join(ROOT, "backups")).at(-1);
+if (!name) throw new Error("no backup in ./backups (type `backup` in the console first)");
+if (into && process.env.CONFIRM_RESTORE != "orbit") throw new Error("set CONFIRM_RESTORE=orbit to replace the live database");
+const target = into ? "orbit" : "orbit_restore_check";
 
-const dumps = readdirSync(join(ROOT, "backups")).filter(f => f.endsWith(".dump")).sort();
-if (!dumps.length) throw new Error("no dump in ./backups (type `backup` in the console first)");
-const file = join(ROOT, "backups", dumps.at(-1));
-const admin = new pg.Client({ host: "127.0.0.1", port: PORT, user: "postgres", password: SUPER, database: "postgres" });
+const admin = new pg.Client(conn("postgres"));
 await admin.connect();
-await admin.query("DROP DATABASE IF EXISTS orbit_restore_check");
-await admin.query("CREATE DATABASE orbit_restore_check");
+await admin.query(`DROP DATABASE IF EXISTS ${target} WITH (FORCE)`);
+await admin.query(`CREATE DATABASE ${target}${into ? " OWNER orbit" : ""}`);
 try {
-  const r = spawnSync(bin("pg_restore"), ["-h", "127.0.0.1", "-p", String(PORT), "-U", "postgres", "-d", "orbit_restore_check", "--no-owner", file],
-    { env: { ...process.env, PGPASSWORD: SUPER }, stdio: "inherit" });
-  if (r.status != 0) throw new Error(`pg_restore exited with ${r.status}`);
-  const c = new pg.Client({ host: "127.0.0.1", port: PORT, user: "postgres", password: SUPER, database: "orbit_restore_check" });
+  const meta = await restore(conn(target), join(ROOT, "backups", name));
+  const c = new pg.Client(conn(target));
   await c.connect();
   for (const table of ["users", "user_badges", "donations", "admin_audit_logs", "schema_migrations"]) {
     const { rows } = await c.query(`SELECT COUNT(*)::int AS n FROM ${table}`);
     console.log(`${table}: ${rows[0].n}`);
   }
+  if (into) {
+    // The API connects as "orbit": it owns what was restored.
+    await c.query(`DO $$ DECLARE r record; BEGIN
+      FOR r IN SELECT tablename FROM pg_tables WHERE schemaname = 'public' LOOP EXECUTE format('ALTER TABLE public.%I OWNER TO orbit', r.tablename); END LOOP;
+      FOR r IN SELECT p.oid::regprocedure AS f FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace LOOP EXECUTE format('ALTER FUNCTION %s OWNER TO orbit', r.f); END LOOP;
+    END $$`);
+  }
   await c.end();
-  console.log(`restore OK from ${dumps.at(-1)}`);
+  console.log(`restore OK from ${name} (${meta.tables.length} tables, backup of ${meta.created})`);
 } finally {
-  await admin.query("DROP DATABASE IF EXISTS orbit_restore_check");
+  if (!into) await admin.query(`DROP DATABASE IF EXISTS ${target}`);
   await admin.end();
 }

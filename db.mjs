@@ -8,12 +8,13 @@
 //   PG_SUPERUSER_PASSWORD  admin password, used only here
 //   PG_APP_PASSWORD        password of the "orbit" role the API uses
 //   SERVER_PORT            port given by Pelican (the allocation)
-import { existsSync, mkdirSync, readdirSync, rmSync, readFileSync, statSync } from "node:fs";
+import { existsSync, rmSync, readFileSync } from "node:fs";
 import { readFile, symlink } from "node:fs/promises";
 import { join, dirname, relative } from "node:path";
 import { spawn } from "node:child_process";
 import pg from "pg";
 import { loadDotEnv } from "./src/config.js";
+import { dump, prune } from "./src/backup.js";
 
 loadDotEnv();
 const ROOT = dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1"));
@@ -47,6 +48,7 @@ async function hydrateSymlinks() {
 function run(cmd, args, opts = {}) {
   return new Promise((resolve, reject) => {
     const p = spawn(cmd, args, { stdio: ["ignore", "inherit", "inherit"], ...opts });
+    p.on("error", reject);
     p.on("exit", code => (code == 0 ? resolve() : reject(new Error(`${cmd} exited with ${code}`))));
   });
 }
@@ -140,15 +142,11 @@ async function ensureAppDatabase() {
   }
 }
 
-// Nightly pg_dump (custom format), 14 kept. Tested with scripts/restore-check.mjs.
+// Nightly logical backup (src/backup.js), 14 kept. Checked with `restore-check`.
 export async function backup() {
-  mkdirSync(BACKUPS, { recursive: true });
-  const file = join(BACKUPS, `orbit-${new Date().toISOString().replace(/[:.]/g, "-")}.dump`);
-  await run(bin("pg_dump"), ["-h", "127.0.0.1", "-p", String(PORT), "-U", "postgres", "-d", "orbit", "-F", "c", "-f", file],
-    { env: { ...process.env, PGPASSWORD: SUPER } });
-  const dumps = readdirSync(BACKUPS).filter(f => f.endsWith(".dump")).sort();
-  for (const old of dumps.slice(0, -14)) rmSync(join(BACKUPS, old));
-  console.log(`backup ${file} (${statSync(file).size} bytes)`);
+  const dir = await dump({ host: "127.0.0.1", port: PORT, user: "postgres", password: SUPER, database: "orbit" }, BACKUPS);
+  prune(BACKUPS, 14);
+  console.log(`backup ${dir}`);
 }
 
 await hydrateSymlinks();
