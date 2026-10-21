@@ -60,18 +60,7 @@ async function initCluster() {
   } finally {
     rmSync(pw, { force: true });
   }
-  const { appendFile, writeFile: write } = await import("node:fs/promises");
-  // Only private addresses (the Docker network between Pelican servers) may connect.
-  await write(join(DATA, "pg_hba.conf"), [
-    "# TYPE  DATABASE  USER      ADDRESS          METHOD",
-    "local   all       all                        scram-sha-256",
-    "host    all       postgres  127.0.0.1/32     scram-sha-256",
-    "host    orbit     orbit     127.0.0.1/32     scram-sha-256",
-    "host    orbit     orbit     10.0.0.0/8       scram-sha-256",
-    "host    orbit     orbit     172.16.0.0/12    scram-sha-256",
-    "host    orbit     orbit     192.168.0.0/16   scram-sha-256",
-    "",
-  ].join("\n"));
+  const { appendFile } = await import("node:fs/promises");
   await appendFile(join(DATA, "postgresql.conf"), [
     "",
     "# Orbit",
@@ -81,6 +70,24 @@ async function initCluster() {
     "shared_buffers = 128MB",
     "log_connections = off",
     "log_min_duration_statement = 2000",
+    "",
+  ].join("\n"));
+}
+
+// Only private addresses (the Docker network between Pelican servers, IPv4 or
+// IPv6 unique-local) may connect, and only as "orbit" to the "orbit" database.
+// Rewritten at each start so rule changes reach existing clusters.
+async function writeHba() {
+  const { writeFile } = await import("node:fs/promises");
+  await writeFile(join(DATA, "pg_hba.conf"), [
+    "# TYPE  DATABASE  USER      ADDRESS          METHOD",
+    "local   all       all                        scram-sha-256",
+    "host    all       postgres  127.0.0.1/32     scram-sha-256",
+    "host    orbit     orbit     127.0.0.1/32     scram-sha-256",
+    "host    orbit     orbit     10.0.0.0/8       scram-sha-256",
+    "host    orbit     orbit     172.16.0.0/12    scram-sha-256",
+    "host    orbit     orbit     192.168.0.0/16   scram-sha-256",
+    "host    orbit     orbit     fc00::/7         scram-sha-256",
     "",
   ].join("\n"));
 }
@@ -158,6 +165,7 @@ if (existsSync(pid)) {
   } catch {}
   if (!alive) rmSync(pid);
 }
+await writeHba();
 startPostgres();
 await ensureAppDatabase();
 const { networkInterfaces } = await import("node:os");
