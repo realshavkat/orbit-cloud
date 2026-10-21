@@ -36,8 +36,11 @@ const bin = name => join(NATIVE, "bin", process.platform == "win32" ? `${name}.e
 async function hydrateSymlinks() {
   const file = join(NATIVE, "pg-symlinks.json");
   if (!existsSync(file)) return;
+  // Paths are relative to the package folder; each link sits next to its library.
+  const base = dirname(NATIVE);
   for (const { source, target } of JSON.parse(await readFile(file, "utf8"))) {
-    if (!existsSync(target)) await symlink(relative(dirname(target), source), target).catch(() => {});
+    const link = join(base, target);
+    if (!existsSync(link)) await symlink(relative(dirname(link), join(base, source)), link).catch(() => {});
   }
 }
 
