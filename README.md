@@ -44,7 +44,8 @@ falls back to a built-in value. Never commit `.env`.
 
 There is no endpoint that creates an owner. The owner is set once, from the server:
 
-1. Sign up on the site with the owner's account and confirm the e-mail.
+1. Sign up on the site with the owner's account and confirm the e-mail (without SMTP: type
+   `verify-email <username>` in the database server's console; it also prints the account id).
 2. Copy the account id (Administration › Users, or `SELECT id FROM users WHERE username = '…'`).
 3. Set `INITIAL_OWNER_ID` to that id and restart the API.
 

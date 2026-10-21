@@ -142,6 +142,19 @@ async function ensureAppDatabase() {
   }
 }
 
+async function verifyEmail(username) {
+  const c = await connect("postgres", SUPER, "orbit");
+  try {
+    const { rows } = await c.query(
+      "UPDATE users SET email_verified_at = COALESCE(email_verified_at, now()) WHERE username_lower = lower($1) AND status <> 'deleted' RETURNING id", [username]);
+    if (!rows.length) return console.log(`verify-email: no account "${username}"`);
+    await c.query("INSERT INTO admin_audit_logs (action, target_type, target_id, reason) VALUES ('user.email_verified_console', 'user', $1, 'confirmed from the database console')", [rows[0].id]);
+    console.log(`verify-email: ${username} confirmed (account id ${rows[0].id})`);
+  } finally {
+    await c.end();
+  }
+}
+
 // Nightly logical backup (src/backup.js), 14 kept. Checked with `restore-check`.
 export async function backup() {
   const dir = await dump({ host: "127.0.0.1", port: PORT, user: "postgres", password: SUPER, database: "orbit" }, BACKUPS);
@@ -185,6 +198,9 @@ process.stdin.on("data", d => {
   const cmd = String(d).trim();
   if (cmd == "stop") stop();
   if (cmd == "backup") backup().catch(e => console.error("backup failed", e));
+  // Without SMTP nobody receives the confirmation link: the panel's console can confirm an address.
+  const verify = /^verify-email ([A-Za-z0-9_.-]{3,24})$/.exec(cmd);
+  if (verify) verifyEmail(verify[1]).catch(e => console.error("verify-email failed:", e.message));
   // Restores the newest dump into a scratch database and checks it (README: restore test).
   if (cmd == "restore-check") spawn(process.execPath, [join(ROOT, "scripts", "restore-check.mjs")], { stdio: "inherit", env: { ...process.env, SERVER_PORT: String(PORT) } });
 });
