@@ -217,7 +217,6 @@ SECTIONS["users/:id"] = {
     const u = d.user;
     const [note, setNote] = useState("");
     const awardable = d.allBadges.filter(b => b.manual_award && !b.protected && b.status == "active" && (!b.official || perms.has("badges.official")));
-    const [badge, setBadge] = useState(awardable[0]?.key ?? "");
     const roleKeys = d.roles.map(r => r.key);
     const suspend = () => openModal(close => <Suspend id={id} close={close} onDone={reload} />);
     return (
@@ -259,18 +258,13 @@ SECTIONS["users/:id"] = {
             return <button key={role} className={`btn small ${has ? "danger" : ""}`} onClick={reasoned(`${has ? t("Retirer", "Remove") : t("Donner", "Grant")} : ${label}`, r => post(`/admin/users/${id}/roles`, { role, action: has ? "revoke" : "grant", reason: r }), reload)}>{has ? `− ${label}` : `+ ${label}`}</button>;
           })}</div>
         </section>
-        <section className="panel stack"><h2>Badges</h2>
+        <section className="panel stack"><header><h2>Badges</h2>
+          {perms.has("badges.award") && awardable.length > 0 && <button className="btn small" onClick={() => awardDrawer({ perms, member: { id, username: u.username }, onDone: reload })}><Icon name="award" />{t("Attribuer un badge", "Award a badge")}</button>}</header>
           {d.badges.length ? <Table cols={["Badge", "Source", "Date", t("État", "State"), ""]}>{d.badges.map((b, i) => (
             <tr key={i}><td>{localBadge(b).name}</td><td className="muted">{b.source}</td><td className="muted">{fmtDate(b.awarded_at)}</td>
               <td>{b.revoked_at ? <span className="tag">{t("retiré", "removed")} : {b.revoke_reason ?? ""}</span> : <span className="tag ok">{t("actif", "active")}</span>}</td>
               <td style={{ textAlign: "right" }}>{!b.revoked_at && perms.has("badges.award") && b.source == "manual" && <button className="btn small quiet danger" onClick={reasoned(`${t("Retirer", "Remove")} ${b.name}`, r => post(`/admin/users/${id}/badges`, { badge: b.key, action: "revoke", reason: r }), reload)}>{t("Retirer", "Remove")}</button>}</td></tr>
           ))}</Table> : <p className="muted">{t("Aucun badge.", "No badge.")}</p>}
-          {perms.has("badges.award") && awardable.length > 0 && (
-            <div className="row">
-              <select className="input" style={{ maxWidth: 260 }} aria-label="Badge" value={badge} onChange={e => setBadge(e.target.value)}>{awardable.map(b => <option key={b.key} value={b.key}>{localBadge(b).name}</option>)}</select>
-              <button className="btn primary" onClick={reasoned(t("Attribuer le badge", "Award the badge"), r => post(`/admin/users/${id}/badges`, { badge, action: "award", reason: r }), reload)}><Icon name="award" />{t("Attribuer", "Award")}</button>
-            </div>
-          )}
         </section>
         {d.reports.length > 0 && <section className="stack"><h2>{t("Signalements le concernant", "Reports about this user")}</h2>
           <Table cols={[t("Motif", "Reason"), t("Détails", "Details"), t("Statut", "Status"), "Date"]}>{d.reports.map(r => <tr key={r.id}><td>{r.reason}</td><td className="muted">{r.details ?? ""}</td><td><Status s={r.status} /></td><td className="muted">{fmtDate(r.created_at)}</td></tr>)}</Table></section>}
@@ -649,13 +643,11 @@ SECTIONS.payments = {
   View({ data, perms }) {
     const reload = useReload();
     const s = data.settings;
-    const [amounts, setAmounts] = useState(s ? s.donation_amounts.map(c => c / 100).join(", ") : "");
-    const [tiers, setTiers] = useState(s ? Object.fromEntries(s.tiers.map(x => [x.key, x.threshold_cents / 100])) : {});
-    const [early, setEarly] = useState(s?.early_supporter_until?.slice(0, 10) ?? "");
-    const [busy, run] = useBusy();
     return (
       <>
-        <Head title={t("Paiements", "Payments")} sub={t("Dons et accès bêta. Les remboursements se font dans Stripe ; ils arrivent ici par webhook.", "Donations and beta access. Refunds are made in Stripe; they arrive here by webhook.")} />
+        <Head title={t("Paiements", "Payments")} sub={t("Dons et accès bêta. Les remboursements se font dans Stripe ; ils arrivent ici par webhook.", "Donations and beta access. Refunds are made in Stripe; they arrive here by webhook.")}>
+          {s && <button className="btn" onClick={async () => (await openModal(close => <DonationSettings s={s} close={close} />), reload())}><Icon name="settings" />{t("Réglages des dons", "Donation settings")}</button>}
+        </Head>
         <div className="tabs">{[["", t("Tous", "All")], ["succeeded", "succeeded"], ["refunded", "refunded"], ["failed", "failed"], ["disputed", "disputed"]]
           .map(([k, l]) => <Link key={k} to={k ? `/admin/payments?status=${k}` : "/admin/payments"} aria-current={k == data.status ? "page" : undefined}>{l}</Link>)}</div>
         {data.donations.length ? (
@@ -675,22 +667,6 @@ SECTIONS.payments = {
             <tr key={ev.id}><td className="muted">{fmtDateTime(ev.received_at)}</td><td className="mono">{ev.type}</td><td><Status s={ev.status} /></td><td>{ev.attempts}</td><td className="small muted">{ev.error ?? ""}</td>
               <td>{ev.status == "failed" && perms.has("donations.settings") && <button className="btn small" onClick={async () => (await act(() => post(`/admin/webhooks/${ev.id}/retry`), { ok: t("Traité", "Processed") })) && reload()}><Icon name="refresh-cw" />{t("Réessayer", "Retry")}</button>}</td></tr>
           ))}</Table> : <Empty icon="webhook">{t("Aucun événement reçu.", "No event received.")}</Empty>}</section>
-        {s && (
-          <form className="panel stack" onSubmit={async e => {
-            e.preventDefault();
-            await run(() => put("/admin/donations/settings", {
-              donation_amounts: amounts.split(",").map(x => Math.round(Number(x.trim()) * 100)).filter(Boolean),
-              tiers: Object.fromEntries(Object.entries(tiers).map(([k, v]) => [k, Math.round(Number(v) * 100)])),
-              early_supporter_until: early ? new Date(`${early}T23:59:59Z`).toISOString() : null,
-            }), { ok: t("Réglages enregistrés", "Settings saved") });
-          }}>
-            <h2>{t("Réglages des dons", "Donation settings")}</h2>
-            <Field label={t("Montants suggérés (€, séparés par des virgules)", "Suggested amounts (€, comma-separated)")}><input className="input" value={amounts} onChange={e => setAmounts(e.target.value)} /></Field>
-            <div className="grid cols-4">{Object.entries(tiers).map(([k, v]) => <Field key={k} label={`${k} (€)`}><input className="input" type="number" min={1} value={v} onChange={e => setTiers({ ...tiers, [k]: e.target.value })} /></Field>)}</div>
-            <Field label={t("Early Supporter : dons confirmés avant le (vide = période close)", "Early Supporter: confirmed donations before (empty = closed)")}><input className="input" type="date" value={early} onChange={e => setEarly(e.target.value)} /></Field>
-            <button className="btn primary" type="submit" style={{ width: "fit-content" }} disabled={busy}>{t("Enregistrer", "Save")}</button>
-          </form>
-        )}
       </>
     );
   },
@@ -700,34 +676,22 @@ SECTIONS.beta = {
   load: () => Promise.all([get("/admin/beta"), get("/admin/beta/keys")]).then(([s, k]) => ({ ...s, list: k.keys })),
   View({ data, perms }) {
     const reload = useReload();
-    const [paywall, setPaywall] = useState(data.paywall);
-    const [price, setPrice] = useState(data.price_cents / 100);
-    const [busy, run] = useBusy();
     const canEdit = perms.has("settings.manage");
     return (
       <>
-        <Head title={t("Bêta", "Beta")} sub={t("Accès au navigateur pendant la bêta. Le personnel a toujours accès.", "Access to the browser during the beta. Staff always have access.")} />
+        <Head title={t("Bêta", "Beta")} sub={t("Accès au navigateur pendant la bêta. Le personnel a toujours accès.", "Access to the browser during the beta. Staff always have access.")}>
+          {canEdit && <button className="btn" onClick={() => openModal(close => <BetaSettings data={data} close={close} onDone={reload} />)}><Icon name="settings" />{t("Réglages", "Settings")}</button>}
+          {perms.has("beta.grant") && <button className="btn primary" onClick={() => openModal(close => <MakeKeys close={close} onDone={reload} />)}><Icon name="plus" />{t("Créer des clés", "Create keys")}</button>}
+        </Head>
         <section className="kpis">
           <Stat label={t("Accès achetés", "Purchased")} value={data.paid} />
           <Stat label={t("Accès offerts", "Given by hand")} value={data.granted} />
           <Stat label={t("Appareils activés", "Activated devices")} value={data.devices} sub={`${data.keys} ${t("clés actives", "active keys")}`} />
           <Stat label={t("Prix", "Price")} value={fmtMoney(data.price_cents)} sub={data.paywall ? t("bêta payante", "paid beta") : t("gratuit pour tous", "free for everyone")} />
         </section>
-        <form className="panel stack" onSubmit={async e => {
-          e.preventDefault();
-          if (await run(() => put("/admin/beta", { paywall, price_cents: Math.round(Number(price) * 100) }), { ok: t("Réglages enregistrés", "Settings saved") })) reload();
-        }}>
-          <h2>{t("Réglages", "Settings")}</h2>
-          <div className="list">
-            <SwitchRow title={t("Bêta payante", "Paid beta")} desc={t("Désactivé : Orbit est gratuit pour tout le monde, plus aucune vérification bloquante.", "Off: Orbit is free for everyone, no blocking check anymore.")} checked={paywall} onChange={setPaywall} disabled={!canEdit} />
-          </div>
-          <Field label={t("Prix (€)", "Price (€)")}><input className="input" type="number" min={1} max={100} step="0.5" style={{ maxWidth: 160 }} value={price} disabled={!canEdit} onChange={e => setPrice(e.target.value)} /></Field>
-          {canEdit && <button className="btn primary" type="submit" style={{ width: "fit-content" }} disabled={busy}>{t("Enregistrer", "Save")}</button>}
-          <p className="hint">{t("Pour offrir l'accès à un membre : Membres › son compte › Offrir la bêta. Il reçoit une clé dans son compte.", "To give access to a member: Users › their account › Give beta. They get a key in their account.")}</p>
-        </form>
+        <p className="note-line"><Icon name="info" />{t("Pour offrir l'accès à un membre : Membres › son compte › Offrir la bêta. Il reçoit une clé dans son compte.", "To give access to a member: Users › their account › Give beta. They get a key in their account.")}</p>
         <section className="stack">
-          <div className="row between"><h2>{t("Clés", "Keys")} <span className="faint">· {data.keys}</span></h2>
-            {perms.has("beta.grant") && <button className="btn" onClick={() => openModal(close => <MakeKeys close={close} onDone={reload} />)}><Icon name="plus" />{t("Créer des clés", "Create keys")}</button>}</div>
+          <h2>{t("Clés", "Keys")} <span className="faint">· {data.keys}</span></h2>
           {data.list.length ? (
             <Table cols={[t("Clé", "Key"), t("Pour", "For"), t("Appareils", "Devices"), t("Créée", "Created"), t("État", "State"), ""]}>
               {data.list.map(k => (
@@ -750,6 +714,54 @@ SECTIONS.beta = {
     );
   },
 };
+
+function BetaSettings({ data, close, onDone }) {
+  const [paywall, setPaywall] = useState(data.paywall);
+  const [price, setPrice] = useState(data.price_cents / 100);
+  const [busy, run] = useBusy();
+  return (
+    <form style={{ display: "contents" }} onSubmit={async e => {
+      e.preventDefault();
+      if (await run(() => put("/admin/beta", { paywall, price_cents: Math.round(Number(price) * 100) }), { ok: t("Réglages enregistrés", "Settings saved") })) (close(), onDone());
+    }}>
+      <h2>{t("Réglages de la bêta", "Beta settings")}</h2>
+      <div className="list">
+        <SwitchRow title={t("Bêta payante", "Paid beta")} desc={t("Désactivé : Orbit est gratuit pour tout le monde, plus aucune vérification bloquante.", "Off: Orbit is free for everyone, no blocking check anymore.")} checked={paywall} onChange={setPaywall} />
+      </div>
+      <Field label={t("Prix (€)", "Price (€)")} hint={t("Payé une seule fois, pour toute la bêta.", "Paid once, for the whole beta.")}><input className="input" type="number" min={1} max={100} step="0.5" value={price} disabled={!paywall} onChange={e => setPrice(e.target.value)} /></Field>
+      <div className="row" style={{ justifyContent: "flex-end" }}>
+        <button type="button" className="btn" onClick={() => close()}>{t("Annuler", "Cancel")}</button>
+        <button type="submit" className="btn primary" aria-busy={busy}>{t("Enregistrer", "Save")}</button>
+      </div>
+    </form>
+  );
+}
+
+function DonationSettings({ s, close }) {
+  const [amounts, setAmounts] = useState(s.donation_amounts.map(c => c / 100).join(", "));
+  const [tiers, setTiers] = useState(Object.fromEntries(s.tiers.map(x => [x.key, x.threshold_cents / 100])));
+  const [early, setEarly] = useState(s.early_supporter_until?.slice(0, 10) ?? "");
+  const [busy, run] = useBusy();
+  return (
+    <form style={{ display: "contents" }} onSubmit={async e => {
+      e.preventDefault();
+      if (await run(() => put("/admin/donations/settings", {
+        donation_amounts: amounts.split(",").map(x => Math.round(Number(x.trim()) * 100)).filter(Boolean),
+        tiers: Object.fromEntries(Object.entries(tiers).map(([k, v]) => [k, Math.round(Number(v) * 100)])),
+        early_supporter_until: early ? new Date(`${early}T23:59:59Z`).toISOString() : null,
+      }), { ok: t("Réglages enregistrés", "Settings saved") })) close();
+    }}>
+      <h2>{t("Réglages des dons", "Donation settings")}</h2>
+      <Field label={t("Montants suggérés (€, séparés par des virgules)", "Suggested amounts (€, comma-separated)")}><input className="input" value={amounts} onChange={e => setAmounts(e.target.value)} /></Field>
+      <div className="grid cols-2" style={{ gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }}>{Object.entries(tiers).map(([k, v]) => <Field key={k} label={`${k} (€)`}><input className="input" type="number" min={1} value={v} onChange={e => setTiers({ ...tiers, [k]: e.target.value })} /></Field>)}</div>
+      <Field label={t("Early Supporter : dons confirmés avant le", "Early Supporter: confirmed donations before")} hint={t("Vide = période close.", "Empty = closed.")}><input className="input" type="date" value={early} onChange={e => setEarly(e.target.value)} /></Field>
+      <div className="row" style={{ justifyContent: "flex-end" }}>
+        <button type="button" className="btn" onClick={() => close()}>{t("Annuler", "Cancel")}</button>
+        <button type="submit" className="btn primary" aria-busy={busy}>{t("Enregistrer", "Save")}</button>
+      </div>
+    </form>
+  );
+}
 
 function MakeKeys({ close, onDone }) {
   const [count, setCount] = useState(1);
@@ -790,12 +802,33 @@ function MakeKeys({ close, onDone }) {
   );
 }
 
+const AUDIT_KINDS = () => [["", t("Tout", "All")], ["user.", t("Membres", "Users")], ["role.", t("Rôles", "Roles")], ["badge.", "Badges"], ["forum.", "Forum"],
+  ["mod.", "Mods"], ["beta.", t("Bêta", "Beta")], ["report.", t("Signalements", "Reports")], ["admin.", t("Connexions", "Sign-ins")]];
+
 SECTIONS.audit = {
-  load: ({ query }) => get(`/admin/audit${query.action ? `?action=${encodeURIComponent(query.action)}` : ""}`),
+  load: ({ query }) => {
+    const p = new URLSearchParams();
+    for (const k of ["action", "q", "before"]) if (query[k]) p.set(k, query[k]);
+    return get(`/admin/audit?${p}`).then(d => ({ ...d, query }));
+  },
   View({ data }) {
+    const navigate = useNavigate();
+    const [q, setQ] = useState(data.query.q ?? "");
+    const go = patch => {
+      const p = new URLSearchParams(Object.entries({ action: data.query.action ?? "", q: data.query.q ?? "", ...patch }).filter(([, v]) => v));
+      navigate(`/admin/audit${p.size ? `?${p}` : ""}`, { viewTransition: true });
+    };
+    const last = data.entries[data.entries.length - 1];
     return (
       <>
-        <Head title={t("Journal d'audit", "Audit log")} sub={t("Lecture seule : la base refuse toute modification ou suppression.", "Read only: the database refuses any change or deletion.")} />
+        <Head title={t("Journal d'audit", "Audit log")} sub={t("Lecture seule : la base refuse toute modification ou suppression.", "Read only: the database refuses any change or deletion.")}>
+          <form className="top-search" style={{ width: 300 }} role="search" onSubmit={e => (e.preventDefault(), go({ q: q.trim() }))}>
+            <Icon name="search" /><input type="search" placeholder={t("Acteur, action, motif, cible", "Actor, action, reason, target")} aria-label={t("Chercher dans le journal", "Search the log")} value={q} onChange={e => setQ(e.target.value)} />
+          </form>
+        </Head>
+        <div className="tabs" role="tablist" aria-label={t("Type", "Type")}>
+          {AUDIT_KINDS().map(([k, l]) => <button key={k} type="button" role="tab" aria-selected={String((data.query.action ?? "") == k)} onClick={() => go({ action: k })}>{l}</button>)}
+        </div>
         {data.entries.length ? (
           <Table cols={["Date", t("Acteur", "Actor"), "Action", t("Cible", "Target"), t("Motif", "Reason"), "IP"]}>
             {data.entries.map(a => (
@@ -803,7 +836,11 @@ SECTIONS.audit = {
                 <td className="mono small">{a.target_type ? `${a.target_type}:${(a.target_id ?? "").slice(0, 12)}` : ""}</td><td className="muted">{a.reason ?? ""}</td><td className="mono small">{a.ip ?? ""}</td></tr>
             ))}
           </Table>
-        ) : <Empty icon="scroll-text">{t("Journal vide.", "Empty log.")}</Empty>}
+        ) : <Empty icon="scroll-text">{data.query.q || data.query.action ? t("Aucune entrée pour ce filtre.", "No entry for this filter.") : t("Journal vide.", "Empty log.")}</Empty>}
+        <div className="row between">
+          {data.query.before ? <button className="btn small" onClick={() => go({ before: "" })}><Icon name="arrow-left" />{t("Plus récentes", "Newest")}</button> : <span />}
+          {data.entries.length == 100 && <button className="btn small" onClick={() => go({ before: last.created_at })}>{t("Plus anciennes", "Older")}<Icon name="arrow-right" /></button>}
+        </div>
       </>
     );
   },

@@ -153,7 +153,7 @@ export function Notifications() {
   const [gone, setGone] = useState(new Set());
   const list = d.notifications.filter(n => !gone.has(n.id));
   return (
-    <div className="stack" style={{ gap: 28, maxWidth: 760 }}>
+    <div className="stack" style={{ gap: 28, maxWidth: 820, marginInline: "auto" }}>
       <PageHead title="Notifications" style={{ marginBottom: 0 }}><Link className="btn small" to="/me/notifications"><Icon name="settings" />{t("Préférences", "Preferences")}</Link></PageHead>
       {list.length ? (
         <div className="list">{list.map(n => {

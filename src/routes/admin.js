@@ -459,7 +459,8 @@ export default async function adminRoutes(app) {
       `SELECT a.id, a.action, a.target_type, a.target_id, a.reason, a.meta, a.ip, a.created_at, x.username AS actor
          FROM admin_audit_logs a LEFT JOIN users x ON x.id = a.actor_id
         WHERE ($1::timestamptz IS NULL OR a.created_at < $1) AND ($2::text IS NULL OR a.action LIKE $2 || '%')
-        ORDER BY a.created_at DESC LIMIT 100`, [before, req.query.action || null]);
+          AND ($3::text IS NULL OR x.username ILIKE '%' || $3 || '%' OR a.action ILIKE '%' || $3 || '%' OR a.reason ILIKE '%' || $3 || '%' OR a.target_id ILIKE $3 || '%' OR a.ip::text LIKE $3 || '%')
+        ORDER BY a.created_at DESC LIMIT 100`, [before, req.query.action || null, typeof req.query.q == "string" && req.query.q.trim() ? req.query.q.trim().slice(0, 60).replace(/[%_\\]/g, "\\$&") : null]);
     return { entries: rows };
   });
 
