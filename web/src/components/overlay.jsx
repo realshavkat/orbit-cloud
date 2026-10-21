@@ -26,7 +26,7 @@ export function toast(text, kind = "") {
   toastTimer = setTimeout(() => drop(id), 3500);
 }
 
-export const openModal = render => new Promise(resolve => push({ type: "modal", render, resolve }));
+export const openModal = (render, opts = {}) => new Promise(resolve => push({ type: "modal", render, resolve, variant: opts.variant ?? "" }));
 export const openDrawer = (title, render, footer) => new Promise(resolve => push({ type: "drawer", title, render, footer, resolve }));
 
 export function confirmDialog({ title, text, action, danger = false, typed = null }) {
@@ -149,8 +149,8 @@ function Layer({ item }) {
   if (item.type == "toast") return <div className={`toast ${item.kind}`} role="status">{item.text}</div>;
   if (item.type == "modal") {
     return (
-      <div className={`modal-bg${closing ? " closing" : ""}`} onClick={e => e.target == e.currentTarget && close(false)}>
-        <div className="modal" role="dialog" aria-modal="true">{item.render(close)}</div>
+      <div className={`modal-bg ${item.variant}${closing ? " closing" : ""}`} onClick={e => e.target == e.currentTarget && close(false)}>
+        <div className={`modal ${item.variant}`} role="dialog" aria-modal="true">{item.render(close)}</div>
       </div>
     );
   }

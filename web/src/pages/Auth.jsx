@@ -11,10 +11,9 @@ const safeNext = next => (next && next.startsWith("/") && !next.startsWith("//")
 function Card({ title, sub, children }) {
   return (
     <div className="stack" style={{ gap: 28 }}>
-      <div className="stack" style={{ gap: 10 }}>
-        <Link className="brand" to="/" aria-label="Orbit"><Logo size={34} /></Link>
-        <h1 style={{ fontSize: 32, marginTop: 14 }}>{title}</h1>
-        {sub && <p className="muted">{sub}</p>}
+      <div className="stack" style={{ gap: 8 }}>
+        <h1 className="auth-title">{title}</h1>
+        {sub && <p className="muted" style={{ fontSize: 16 }}>{sub}</p>}
       </div>
       <div className="stack" style={{ gap: 20 }}>{children}</div>
     </div>

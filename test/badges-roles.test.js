@@ -153,3 +153,15 @@ test("badge catalog, detail page and authenticity check", async () => {
   assert.equal(check.body.valid, true);
   assert.equal(check.body.username, owner.username);
 });
+
+test("rename: members change their own @, admins change someone else's with a reason", async () => {
+  const admin = await member(ctx);
+  await grantRole(ctx.pool, admin.id, "administrator");
+  const u = await member(ctx);
+  const name = `ren${Date.now().toString(36).slice(-6)}`;
+  assert.equal((await u.post(`/api/v1/admin/users/${admin.id}/username`, { username: "nope_123", reason: "test" })).status, 403);
+  assert.equal((await admin.post(`/api/v1/admin/users/${u.id}/username`, { username: name, reason: "asked by the member" })).status, 200);
+  assert.equal((await u.get("/api/v1/me")).body.username, name);
+  assert.equal((await admin.post(`/api/v1/admin/users/${u.id}/username`, { username: admin.username, reason: "clash" })).body.error, "username_taken");
+  assert.equal((await admin.post(`/api/v1/admin/users/${u.id}/username`, { username: "a", reason: "bad" })).body.error, "username_format");
+});

@@ -1,8 +1,9 @@
 import { createBrowserRouter, redirect, Outlet, ScrollRestoration, useRouteError, useNavigation } from "react-router";
 import { session } from "./lib/session.js";
-import { Topbar, Footer } from "./components/Shell.jsx";
+import { t } from "./lib/i18n.js";
+import { Topbar, Footer, SLOGAN, LangSwitch } from "./components/Shell.jsx";
 import { Overlays } from "./components/overlay.jsx";
-import { ErrorBox, Spinner } from "./components/ui.jsx";
+import { ErrorBox, Spinner, NotFound, Liquid, Logo, Link } from "./components/ui.jsx";
 import Landing from "./pages/Landing.jsx";
 import * as Auth from "./pages/Auth.jsx";
 import * as Profile from "./pages/Profile.jsx";
@@ -39,6 +40,23 @@ function Layout({ variant }) {
   );
 }
 
+function AuthLayout() {
+  return (
+    <div className="auth">
+      <aside className="auth-side">
+        <Liquid />
+        <Link className="brand" to="/"><Logo size={30} /><span>Orbit</span></Link>
+        <div className="auth-pitch"><h2>{SLOGAN()}</h2>
+          <p>{t("Un compte pour ton profil, tes badges, tes mods et ta clé bêta.", "One account for your profile, badges, mods and beta key.")}</p></div>
+        <LangSwitch />
+      </aside>
+      <main className="auth-main"><div className="auth-form"><Outlet /></div></main>
+      <Overlays />
+      <ScrollRestoration />
+    </div>
+  );
+}
+
 function AdminLayout() {
   return (
     <>
@@ -51,7 +69,7 @@ function AdminLayout() {
 
 function RouteError() {
   const error = useRouteError();
-  return <ErrorBox error={error?.status == 404 ? { code: "not_found" } : error} />;
+  return error?.status == 404 ? <NotFound /> : <ErrorBox error={error} />;
 }
 
 const page = (path, mod, extra = {}) => ({ path, element: <mod.default />, loader: mod.loader, errorElement: <RouteError />, ...extra });
@@ -63,7 +81,7 @@ export const router = createBrowserRouter([
     children: [{ path: "/", element: <Landing />, errorElement: <RouteError /> }],
   },
   {
-    element: <Layout variant="narrow" />,
+    element: <AuthLayout />,
     children: [
       { path: "/login", element: <Auth.Login />, errorElement: <RouteError /> },
       { path: "/register", element: <Auth.Register />, errorElement: <RouteError /> },
@@ -98,7 +116,7 @@ export const router = createBrowserRouter([
       { path: "/me/:tab?", element: <Account.default />, loader: guard(Account.loader) },
       { path: "/terms", element: <Legal.Terms /> },
       { path: "/privacy", element: <Legal.Privacy /> },
-      { path: "*", element: <ErrorBox error={{ code: "not_found" }} /> },
+      { path: "*", element: <NotFound /> },
     ],
   },
   {

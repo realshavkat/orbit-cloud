@@ -21,7 +21,14 @@ export const normalizeKey = raw => {
 };
 
 const seal = key => (secret ? encrypt(secret, key) : `plain:${key}`);
-export const openKey = enc => (enc.startsWith("plain:") ? enc.slice(6) : decrypt(secret, enc));
+export function openKey(enc) {
+  if (enc.startsWith("plain:")) return enc.slice(6);
+  try {
+    return decrypt(secret, enc);
+  } catch {
+    return null;
+  }
+}
 
 export async function betaSettings(db) {
   const s = await getSetting(db, "beta", {});

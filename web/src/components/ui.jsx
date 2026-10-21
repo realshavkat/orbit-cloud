@@ -102,12 +102,30 @@ export function PersonCard({ user, extra }) {
   );
 }
 
-export const PageHead = ({ title, sub, children, style }) => (
-  <div className="page-head" style={style}>
-    <div><h1>{title}</h1>{sub && <p>{sub}</p>}</div>
-    {children && <div className="row wrap">{children}</div>}
-  </div>
+export const PageHero = ({ eyebrow, title, sub, children, liquid, style }) => (
+  <header className={`page-hero${liquid ? " with-liquid" : ""}`} style={style}>
+    {liquid && <Liquid />}
+    <div className="ph-text">{eyebrow && <span className="eyebrow">{eyebrow}</span>}<h1>{title}</h1>{sub && <p>{sub}</p>}</div>
+    {children && <div className="ph-actions">{children}</div>}
+  </header>
 );
+
+export const PageHead = PageHero;
+
+export function NotFound() {
+  return (
+    <div className="not-found">
+      <Liquid />
+      <span className="nf-code">404</span>
+      <h1>{t("Cette page a quitté l'orbite.", "This page left orbit.")}</h1>
+      <p>{t("Le lien est peut-être ancien, ou la page a été déplacée.", "The link may be old, or the page has moved.")}</p>
+      <div className="row wrap" style={{ justifyContent: "center" }}>
+        <Link className="btn primary" to="/">{t("Retour à l'accueil", "Back home")}</Link>
+        <Link className="btn" to="/mods">{t("Voir les mods", "Browse mods")}</Link>
+      </div>
+    </div>
+  );
+}
 
 export const Tabs = ({ items, current, label }) => (
   <div className="tabs" role="tablist" aria-label={label}>

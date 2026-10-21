@@ -4,7 +4,7 @@ import { t, errorText } from "../lib/i18n.js";
 import { get, post, fileToBase64 } from "../lib/api.js";
 import { useMe } from "../lib/session.js";
 import { fmtDate, fmtShort } from "../lib/format.js";
-import { Icon, Link, Empty, ErrorBox, Field, Spinner } from "../components/ui.jsx";
+import { Icon, Link, Empty, ErrorBox, Field, Spinner, PageHero } from "../components/ui.jsx";
 import { act, openModal, toast, useBusy } from "../components/overlay.jsx";
 
 const DOWNLOAD = "/beta";
@@ -41,11 +41,10 @@ export function Store() {
   };
   return (
     <div className="stack" style={{ gap: 32 }}>
-      <div className="page-head" style={{ marginBottom: 0 }}>
-        <div><h1 style={{ fontSize: 48 }}>Mods</h1>
-          <p>{t("Change l'apparence d'Orbit en un clic. Chaque mod est vérifié par l'équipe Orbit avant d'être publié.", "Change how Orbit looks and feels, one click to install. Every mod is checked by the Orbit team before it is listed.")}</p></div>
+      <PageHero liquid style={{ marginBottom: 0 }} eyebrow="Orbit Mods" title={t("Fais d'Orbit le tien.", "Make Orbit yours.")}
+        sub={t("Change l'apparence d'Orbit en un clic. Chaque mod est vérifié par l'équipe Orbit avant d'être publié.", "Change how Orbit looks and feels, one click to install. Every mod is checked by the Orbit team before it is listed.")}>
         <Link className="btn" to={me ? "/mods/submit" : "/login?next=/mods/submit"}><Icon name="upload" />{t("Proposer un mod", "Submit a mod")}</Link>
-      </div>
+      </PageHero>
       <div className="row wrap" style={{ gap: 12 }}>
         <div className="tabs" role="tablist">{CATS().map(([k, l]) => <Link key={k} to={url({ category: k })} role="tab" aria-selected={String(k == category)}>{l}</Link>)}</div>
         <div className="row" style={{ marginLeft: "auto" }}>

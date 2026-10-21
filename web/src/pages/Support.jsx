@@ -4,7 +4,7 @@ import { t } from "../lib/i18n.js";
 import { get, post } from "../lib/api.js";
 import { useMe } from "../lib/session.js";
 import { fmtMoney } from "../lib/format.js";
-import { Icon, Link, Liquid } from "../components/ui.jsx";
+import { Icon, Link, PageHero } from "../components/ui.jsx";
 import { useBusy } from "../components/overlay.jsx";
 
 export const loader = () => get("/donations/info");
@@ -30,12 +30,9 @@ export default function Support() {
     <div className="stack" style={{ gap: 48 }}>
       {params.get("thanks") && <div className="alert ok"><Icon name="heart" />{t("Merci ! Ton don sera confirmé dans quelques instants, dès que le paiement est validé ; ton badge arrivera à ce moment-là.", "Thank you! Your donation will be confirmed in a moment, once the payment clears; your badge arrives then.")}</div>}
       {params.get("canceled") && <div className="alert"><Icon name="info" />{t("Paiement annulé : rien n'a été prélevé.", "Payment canceled: nothing was charged.")}</div>}
-      <header className="support-head">
-        <Liquid />
-        <h1>{t("Soutenir Orbit", "Support Orbit")}</h1>
-        <p>{t("Les dons paient les serveurs, la signature du logiciel et le temps de développement. Ils ne débloquent rien : c'est un merci.",
-          "Donations pay for servers, code signing and development time. They unlock nothing: it's a thank you.")}</p>
-      </header>
+      <PageHero liquid style={{ marginBottom: 0 }} eyebrow={t("Soutenir", "Support")} title={t("Aide Orbit à grandir.", "Help Orbit grow.")}
+        sub={t("Les dons paient les serveurs, la signature du logiciel et le temps de développement. Ils ne débloquent rien : c'est un merci.",
+          "Donations pay for servers, code signing and development time. They unlock nothing: it's a thank you.")} />
       <div className="support-grid">
         <section className="stack" style={{ gap: 22 }}>
           {!info.enabled && <div className="alert warn"><Icon name="info" />{t("Les dons ne sont pas encore ouverts.", "Donations are not open yet.")}</div>}

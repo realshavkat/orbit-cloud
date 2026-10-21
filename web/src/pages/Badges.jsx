@@ -3,7 +3,7 @@ import { t, errorText } from "../lib/i18n.js";
 import { get } from "../lib/api.js";
 import { useMe } from "../lib/session.js";
 import { fmtDate, RARITY, localBadge } from "../lib/format.js";
-import { Icon, Link, PersonCard, Empty, Tabs } from "../components/ui.jsx";
+import { Icon, Link, PersonCard, Empty, Tabs, PageHero } from "../components/ui.jsx";
 
 const CATEGORY = { official: t("Officiel", "Official"), support: t("Soutien", "Supporter"), community: t("Communauté", "Community"), seniority: t("Ancienneté", "Seniority"),
   event: t("Événement", "Event"), contribution: "Contribution", creator: t("Création de contenu", "Content creation"), beta: t("Bêta-test", "Beta testing"),
@@ -24,13 +24,9 @@ export function Catalog() {
     ...[...new Set(badges.map(b => b.category))].map(c => [`/badges?f=${c}`, CATEGORY[c] ?? c, c])];
   return (
     <div className="stack" style={{ gap: 36, maxWidth: 980 }}>
-      <div className="stack" style={{ gap: 12 }}>
-        <h1 style={{ fontSize: 44 }}>Badges</h1>
-        <p className="muted" style={{ fontSize: 18, maxWidth: "60ch" }}>
-          {t("Chaque badge correspond à un critère réel. Aucun ne s'achète et aucun ne donne de droits.", "Each badge matches a real criterion. None can be bought and none grants rights.")}
-          {me && <> {t("Tu en as ", "You have ")}<b style={{ color: "var(--ink)", fontWeight: 600 }}>{mine.size} / {badges.length}</b>.</>}
-        </p>
-      </div>
+      <PageHero liquid style={{ marginBottom: 0 }} eyebrow="Badges" title={t("Gagnés, jamais achetés.", "Earned, never bought.")}
+        sub={<>{t("Chaque badge correspond à un critère réel et ne donne aucun droit.", "Each badge matches a real criterion and grants no rights.")}
+          {me && <> {t("Tu en as ", "You have ")}<b style={{ color: "var(--ink)", fontWeight: 600 }}>{mine.size} / {badges.length}</b>.</>}</>} />
       <Tabs items={tabs} current={filter} label={t("Filtrer", "Filter")} />
       {Object.keys(groups).length ? Object.entries(groups).map(([cat, list]) => (
         <section key={cat}>

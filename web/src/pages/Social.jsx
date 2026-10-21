@@ -4,7 +4,7 @@ import { t, errorText } from "../lib/i18n.js";
 import { get, post, patch, del } from "../lib/api.js";
 import { useMe } from "../lib/session.js";
 import { ago, localBadge } from "../lib/format.js";
-import { Icon, Link, PersonCard, Empty, PageHead } from "../components/ui.jsx";
+import { Icon, Link, PersonCard, Empty, PageHead, PageHero } from "../components/ui.jsx";
 import { act } from "../components/overlay.jsx";
 
 export const discoverLoader = () => get("/users/discover");
@@ -19,7 +19,7 @@ export function Discover() {
   ].filter(([, , list]) => list.length);
   return (
     <>
-      <PageHead title={t("Découvrir", "Discover")} sub={t("Seuls les membres qui ont choisi d'apparaître ici sont affichés.", "Only members who chose to appear here are shown.")} />
+      <PageHero liquid eyebrow={t("Communauté", "Community")} title={t("Découvrir", "Discover")} sub={t("Des membres d'Orbit, leurs sites et leurs collections. Seuls ceux qui ont choisi d'apparaître ici sont affichés.", "Orbit members, their sites and collections. Only people who chose to appear here are shown.")} />
       {blocks.length || d.collections.length ? (
         <div className="stack" style={{ gap: 40 }}>
           {blocks.map(([title, sub, list]) => (
@@ -116,7 +116,8 @@ export function Friends() {
   );
 }
 
-const securityText = what => ({ email_changed: t("Ton adresse e-mail a été changée.", "Your e-mail address was changed."),
+const securityText = (what, data = {}) => ({ email_changed: t("Ton adresse e-mail a été changée.", "Your e-mail address was changed."),
+  username_changed: t(`L'équipe a changé ton pseudo en @${data.username}.`, `The team changed your username to @${data.username}.`),
   mfa_reset: t("Ta validation en deux étapes a été réinitialisée par l'équipe.", "Your two-step verification was reset by the team.") }[what] ?? what);
 
 const NOTIF = {
@@ -125,7 +126,7 @@ const NOTIF = {
   badge: n => ["award", t(`Nouveau badge : ${localBadge({ key: n.data.badge, name: n.data.name }).name}`, `New badge: ${n.data.name}`), "/me/badges"],
   support_badge: n => ["heart", t(`Merci ! Badge de soutien : ${localBadge({ key: n.data.badge, name: n.data.name }).name}`, `Thank you! Support badge: ${n.data.name}`), "/me/badges"],
   contribution: () => ["git-branch", t("Ta contribution a été reconnue.", "Your contribution was recognised."), "/me/badges"],
-  security: n => ["shield-alert", securityText(n.data.what), "/me/security"],
+  security: n => ["shield-alert", securityText(n.data.what, n.data), "/me/security"],
   report_update: n => ["flag", n.data.status == "resolved" ? t("Ton signalement a été traité. Merci.", "Your report was handled. Thank you.") : t("Ton signalement a été examiné.", "Your report was reviewed."), null],
   moderation: n => ["shield", n.data.appeal ? (n.data.appeal == "accepted" ? t("Ta contestation a été acceptée.", "Your appeal was accepted.") : t("Ta contestation a été refusée.", "Your appeal was rejected."))
     : t(`Décision de modération : ${n.data.reason ?? ""}`, `Moderation decision: ${n.data.reason ?? ""}`), "/me/data"],

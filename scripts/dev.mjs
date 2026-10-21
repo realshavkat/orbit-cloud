@@ -1,7 +1,7 @@
 import EmbeddedPostgres from "embedded-postgres";
 import { existsSync } from "node:fs";
 import { spawn } from "node:child_process";
-import { randomBytes } from "node:crypto";
+import { createHash } from "node:crypto";
 
 const dir = new URL("../.dev-pg", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
 const fresh = !existsSync(`${dir}/PG_VERSION`);
@@ -15,7 +15,7 @@ const api = spawn(process.execPath, [`${root}api.mjs`], {
   cwd: root,
   stdio: "inherit",
   env: { ...process.env, DATABASE_URL: "postgres://postgres:dev-only-password@127.0.0.1:54329/orbit", APP_BASE_URL: "http://localhost:8790",
-    MFA_ENCRYPTION_KEY: process.env.MFA_ENCRYPTION_KEY ?? randomBytes(32).toString("hex"), PORT: "8790" },
+    MFA_ENCRYPTION_KEY: process.env.MFA_ENCRYPTION_KEY ?? createHash("sha256").update("orbit-dev-only").digest("hex"), PORT: "8790" },
 });
 const stop = async () => {
   api.kill();

@@ -3,6 +3,7 @@ import { t } from "../lib/i18n.js";
 import { useMe, session } from "../lib/session.js";
 import { fmtMoney } from "../lib/format.js";
 import { Icon, Link, Liquid } from "../components/ui.jsx";
+import { SLOGAN } from "../components/Shell.jsx";
 
 const STEPS = () => [
   ["spaces", "layers", t("Espaces", "Spaces"), t("Un espace pour chaque partie de ta vie", "A space for each part of your life"),
@@ -157,7 +158,7 @@ export default function Landing() {
         <Liquid className="liquid hero-liquid" />
         <div className="hero-text">
           <span className="kicker-line" data-reveal="">{price ? t("Navigateur pour Windows · bêta", "Browser for Windows · beta") : t("Navigateur pour Windows · version 158", "Browser for Windows · version 158")}</span>
-          <h1 data-reveal="" style={{ "--d": "80ms" }}>{t("Le navigateur qui gravite autour de toi.", "The browser that orbits around you.")}</h1>
+          <h1 data-reveal="" style={{ "--d": "80ms" }}>{SLOGAN()}</h1>
           <p className="lead" data-reveal="" style={{ "--d": "160ms" }}>
             {t("Espaces, palette de commandes, vue partagée, verrouillage. Ton historique reste sur ton ordinateur. Basé sur Firefox.",
               "Spaces, command palette, split view, lock. Your history stays on your computer. Built on Firefox.")}
@@ -172,7 +173,7 @@ export default function Landing() {
         {[...MORE(), ...MORE()].map(([ic, name], i) => <span key={i}><Icon name={ic} />{name}</span>)}
       </div></div>
 
-      <section className="story">
+      <section className="story" id="features">
         <header className="section-head" data-reveal="">
           <span className="eyebrow">{t("Fonctionnalités", "Features")}</span>
           <h2>{t("Fait pour aller vite.", "Built for speed.")}</h2>

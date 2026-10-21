@@ -234,6 +234,7 @@ SECTIONS["users/:id"] = {
             {d.beta && <span className={`tag ${d.beta.paid || d.beta.granted ? "ok" : ""}`}>{d.beta.paid ? t("bêta achetée", "beta purchased") : d.beta.granted ? t("bêta offerte", "beta given") : t("pas de bêta", "no beta")}{d.beta.key && ` · ${t("clé", "key")} …${d.beta.key.last4} · ${d.beta.key.devices}/${d.beta.key.max_devices}`}</span>}
           </div>
           <div className="row wrap">
+            {perms.has("users.rename") && <button className="btn" onClick={() => openModal(close => <Rename id={id} current={u.username} close={close} onDone={reload} />)}><Icon name="pencil" />{t("Changer le pseudo", "Change username")}</button>}
             {perms.has("users.suspend") && (u.status == "suspended"
               ? <button className="btn" onClick={reasoned(t("Réactiver le compte", "Reactivate the account"), r => post(`/admin/users/${id}/unsuspend`, { reason: r }), reload)}>{t("Réactiver", "Reactivate")}</button>
               : <button className="btn danger" onClick={suspend}><Icon name="ban" />{t("Suspendre", "Suspend")}</button>)}
@@ -286,6 +287,31 @@ SECTIONS["users/:id"] = {
     );
   },
 };
+
+function Rename({ id, current, close, onDone }) {
+  const [username, setUsername] = useState(current);
+  const [reason, setReason] = useState("");
+  const [busy, run] = useBusy();
+  return (
+    <>
+      <h2>{t("Changer le pseudo", "Change username")}</h2>
+      <p>{t(`Le membre garde son compte ; seul son @ change. Il est prévenu.`, `The member keeps their account; only their @ changes. They get notified.`)}</p>
+      <Field label={t("Nouveau pseudo", "New username")} hint={t("3 à 24 caractères : lettres, chiffres, _ . -", "3 to 24 characters: letters, digits, _ . -")}>
+        <input className="input" maxLength={24} spellCheck="false" value={username} onChange={e => setUsername(e.target.value)} autoFocus />
+      </Field>
+      <Field label={t("Motif", "Reason")}><input className="input" maxLength={500} placeholder={t("Visible dans le journal", "Kept in the audit log")} value={reason} onChange={e => setReason(e.target.value)} /></Field>
+      <div className="row" style={{ justifyContent: "flex-end" }}>
+        <button className="btn" onClick={() => close()}>{t("Annuler", "Cancel")}</button>
+        <button className="btn primary" disabled={busy || username == current || reason.trim().length < 3} onClick={async () => {
+          if (await run(() => post(`/admin/users/${id}/username`, { username, reason }), { ok: t("Pseudo changé", "Username changed") })) {
+            close();
+            onDone();
+          }
+        }}>{t("Changer", "Change")}</button>
+      </div>
+    </>
+  );
+}
 
 function Suspend({ id, close, onDone }) {
   const [until, setUntil] = useState("");

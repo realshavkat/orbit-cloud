@@ -4,6 +4,9 @@ import { t, LANG, setLang } from "../lib/i18n.js";
 import { get, post } from "../lib/api.js";
 import { useMe, setMe } from "../lib/session.js";
 import { Icon, Logo, Avatar, Link } from "./ui.jsx";
+import { openModal } from "./overlay.jsx";
+
+export const SLOGAN = () => t("Le navigateur qui gravite autour de toi.", "The browser that orbits you.");
 
 export const LangSwitch = () => (
   <div className="lang" role="group" aria-label="Language">
@@ -41,15 +44,17 @@ function AccountMenu({ me }) {
   };
   return (
     <div ref={ref} style={{ position: "relative" }}>
-      <button className="icon-btn" aria-haspopup="menu" aria-expanded={open} aria-label={t("Mon compte", "My account")} style={{ width: "auto" }} onClick={() => setOpen(!open)}>
+      <button className="avatar-btn" aria-haspopup="menu" aria-expanded={open} aria-label={t("Mon compte", "My account")} onClick={() => setOpen(!open)}>
         <Avatar user={me} className="avatar sm" />
       </button>
       {open && (
         <div className="menu" role="menu" onClick={() => setOpen(false)}>
+          <div className="menu-head"><Avatar user={me} className="avatar sm" /><span><b>{me.display_name || me.username}</b><span>@{me.username}</span></span></div>
           <Link to={`/u/${me.username}`} role="menuitem"><Icon name="user" />{t("Mon profil", "My profile")}</Link>
           <Link to="/me" role="menuitem"><Icon name="settings" />{t("Mon compte", "Account")}</Link>
           <Link to="/friends" role="menuitem"><Icon name="users" />{t("Amis", "Friends")}</Link>
           <Link to="/mods/mine" role="menuitem"><Icon name="palette" />{t("Mes mods", "My mods")}</Link>
+          <Link to="/me/payments" role="menuitem"><Icon name="key-round" />{t("Ma clé bêta", "My beta key")}</Link>
           {staff && <Link to="/admin" role="menuitem"><Icon name="layout-dashboard" />{t("Administration", "Admin")}</Link>}
           <hr />
           <button role="menuitem" onClick={signOut}><Icon name="log-out" />{t("Se déconnecter", "Sign out")}</button>
@@ -76,15 +81,75 @@ function useUnread(me) {
   return n;
 }
 
+function SearchDialog({ close }) {
+  const navigate = useNavigate();
+  const [q, setQ] = useState("");
+  const [res, setRes] = useState({ users: [], mods: [] });
+  const [active, setActive] = useState(0);
+  useEffect(() => {
+    const term = q.trim();
+    if (term.length < 2) return setRes({ users: [], mods: [] });
+    const id = setTimeout(async () => {
+      const [u, m] = await Promise.all([
+        get(`/users/search?q=${encodeURIComponent(term)}`).catch(() => ({ users: [] })),
+        get(`/mods?q=${encodeURIComponent(term)}`).catch(() => ({ mods: [] })),
+      ]);
+      setRes({ users: u.users.slice(0, 5), mods: m.mods.slice(0, 4) });
+      setActive(0);
+    }, 180);
+    return () => clearTimeout(id);
+  }, [q]);
+  const items = [
+    ...res.users.map(u => ({ key: `u${u.id}`, to: `/u/${u.username}`, icon: <Avatar user={u} className="avatar xs" />, title: u.display_name || u.username, sub: `@${u.username}` })),
+    ...res.mods.map(m => ({ key: `m${m.slug}`, to: `/mods/${m.slug}`, icon: <span className="search-ic"><Icon name="palette" /></span>, title: m.name, sub: `Mod · @${m.author}` })),
+  ];
+  const go = item => {
+    close();
+    navigate(item.to, { viewTransition: true });
+  };
+  return (
+    <div className="search-box">
+      <label className="search-input"><Icon name="search" />
+        <input autoFocus placeholder={t("Chercher un membre ou un mod", "Search members and mods")} aria-label={t("Rechercher", "Search")} value={q}
+          onChange={e => setQ(e.target.value)} onKeyDown={e => {
+            if (e.key == "ArrowDown") (e.preventDefault(), setActive(a => Math.min(items.length - 1, a + 1)));
+            if (e.key == "ArrowUp") (e.preventDefault(), setActive(a => Math.max(0, a - 1)));
+            if (e.key == "Enter" && items[active]) go(items[active]);
+          }} />
+        <kbd>Esc</kbd>
+      </label>
+      {q.trim().length >= 2 && (
+        <div className="search-results" role="listbox">
+          {items.length ? items.map((it, i) => (
+            <button key={it.key} type="button" role="option" aria-selected={i == active} onMouseEnter={() => setActive(i)} onClick={() => go(it)}>
+              {it.icon}<span className="sr-text"><b>{it.title}</b><span>{it.sub}</span></span><Icon name="arrow-right" />
+            </button>
+          )) : <p className="search-empty">{t("Aucun résultat.", "No results.")}</p>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export const openSearch = () => openModal(close => <SearchDialog close={close} />, { variant: "search" });
+
 export function Topbar() {
   const me = useMe();
   const unread = useUnread(me);
-  const navigate = useNavigate();
   const { pathname } = useLocation();
-  const [q, setQ] = useState("");
   const [menu, setMenu] = useState(false);
   useEffect(() => setMenu(false), [pathname]);
-  const nav = [["/discover", t("Découvrir", "Discover")], ["/mods", "Mods"], ["/badges", "Badges"], ["/support", t("Soutenir", "Support")]];
+  useEffect(() => {
+    const key = e => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() == "k") {
+        e.preventDefault();
+        openSearch();
+      }
+    };
+    document.addEventListener("keydown", key);
+    return () => document.removeEventListener("keydown", key);
+  }, []);
+  const nav = [["/discover", t("Découvrir", "Discover")], ["/mods", "Mods"], ["/badges", "Badges"], ["/beta", t("Bêta", "Beta")], ["/support", t("Soutenir", "Support")]];
   return (
     <header className="top">
       <div className="top-in">
@@ -94,23 +159,22 @@ export function Topbar() {
         </nav>
         <div className="grow" />
         <div className="top-right">
-          <form className="top-search" role="search" onSubmit={e => {
-            e.preventDefault();
-            if (q.trim()) navigate(`/search?q=${encodeURIComponent(q.trim())}`, { viewTransition: true });
-          }}>
-            <Icon name="search" />
-            <input type="search" placeholder={t("Rechercher un membre", "Search members")} aria-label={t("Rechercher", "Search")} value={q} onChange={e => setQ(e.target.value)} />
-          </form>
+          <button className="search-btn" type="button" onClick={openSearch} aria-label={t("Rechercher", "Search")}>
+            <Icon name="search" /><span>{t("Rechercher", "Search")}</span><kbd>Ctrl K</kbd>
+          </button>
           <LangSwitch />
           {me ? (
             <>
-              <Link className="icon-btn" to="/notifications" aria-label={t("Notifications", "Notifications")}>
+              <Link className="icon-btn" to="/notifications" aria-label="Notifications">
                 <Icon name="bell" />{unread > 0 && <span className="count">{unread > 99 ? "99+" : unread}</span>}
               </Link>
               <AccountMenu me={me} />
             </>
           ) : (
-            <Link className="btn small quiet" to="/login">{t("Se connecter", "Sign in")}</Link>
+            <>
+              <Link className="btn small quiet" to="/login">{t("Se connecter", "Sign in")}</Link>
+              <Link className="btn small primary hide-sm" to="/beta">{t("Obtenir Orbit", "Get Orbit")}</Link>
+            </>
           )}
         </div>
         <button className="icon-btn menu-btn" aria-label="Menu" aria-expanded={menu} onClick={() => setMenu(!menu)}><Icon name="menu" /></button>
@@ -120,13 +184,17 @@ export function Topbar() {
 }
 
 export const Footer = () => (
-  <footer>
-    <div className="row"><span className="brand"><Logo size={22} /><span>Orbit</span></span>
-      <span>{t("Gratuit pour tous à la version 1.0.", "Free for everyone at version 1.0.")}</span></div>
-    <nav className="row" aria-label={t("Liens", "Links")}>
-      <Link to="/mods">Mods</Link><Link to="/badges">Badges</Link><Link to="/beta">{t("Bêta", "Beta")}</Link><Link to="/support">{t("Soutenir", "Support")}</Link>
-      <Link to="/terms">{t("Conditions", "Terms")}</Link><Link to="/privacy">{t("Confidentialité", "Privacy")}</Link>
-      <a href="https://github.com/realshavkat/orbit" target="_blank" rel="noopener">GitHub</a>
+  <footer className="foot">
+    <div className="foot-brand">
+      <Link className="brand" to="/"><Logo size={26} /><span>Orbit</span></Link>
+      <p className="foot-slogan">{SLOGAN()}</p>
+      <p className="faint small">{t("Bêta pour Windows. Gratuit pour tous à la version 1.0.", "Beta for Windows. Free for everyone at version 1.0.")}</p>
+    </div>
+    <nav className="foot-cols" aria-label={t("Liens", "Links")}>
+      <div><h3>{t("Produit", "Product")}</h3><Link to="/beta">{t("Obtenir la bêta", "Get the beta")}</Link><Link to="/mods">Mods</Link><Link to="/#features">{t("Fonctionnalités", "Features")}</Link></div>
+      <div><h3>{t("Communauté", "Community")}</h3><Link to="/discover">{t("Découvrir", "Discover")}</Link><Link to="/badges">Badges</Link><Link to="/support">{t("Soutenir", "Support")}</Link></div>
+      <div><h3>Orbit</h3><Link to="/terms">{t("Conditions", "Terms")}</Link><Link to="/privacy">{t("Confidentialité", "Privacy")}</Link><a href="https://github.com/realshavkat/orbit" target="_blank" rel="noopener">GitHub</a></div>
     </nav>
+    <div className="foot-bottom"><span>© 2026 Orbit</span><LangSwitch /></div>
   </footer>
 );

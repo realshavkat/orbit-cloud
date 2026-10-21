@@ -1,5 +1,5 @@
 import { tx } from "../db.js";
-import { ApiError, bad, cleanText, intParam } from "../lib/validate.js";
+import { ApiError, bad, cleanText, intParam, usernameProblem } from "../lib/validate.js";
 import { audit, notify } from "../services/core.js";
 import { awardBadge, revokeBadge, syncRoleBadges, badgeByKey } from "../services/badges.js";
 import { processEvent, markFailed } from "../services/payments.js";
@@ -150,6 +150,27 @@ export default async function adminRoutes(app) {
       await c.query("UPDATE user_sessions SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL", [req.params.id]);
       await notify(c, req.params.id, "security", { what: "mfa_reset" });
       await audit(c, { actorId: req.auth.user.id, action: "user.mfa_reset", targetType: "user", targetId: req.params.id, reason: req.body.reason, ip: req.ip });
+    });
+    return { ok: true };
+  });
+
+  app.post("/users/:id/username", { schema: { ...idParam, body: reasonBody({ username: { type: "string", maxLength: 24 } }, ["username", "reason"]) } }, async (req) => {
+    await perm(req, "users.rename");
+    await outrank(req, req.params.id);
+    const p = usernameProblem(req.body.username);
+    if (p) throw bad(p);
+    await tx(db, async c => {
+      const { rows: [u] } = await c.query("SELECT username FROM users WHERE id = $1 AND status <> 'deleted'", [req.params.id]);
+      if (!u) throw new ApiError(404, "not_found");
+      try {
+        await c.query("UPDATE users SET username = $2, updated_at = now() WHERE id = $1", [req.params.id, req.body.username]);
+      } catch (e) {
+        if (e.code == "23505") throw new ApiError(409, "username_taken");
+        throw e;
+      }
+      await audit(c, { actorId: req.auth.user.id, action: "user.rename", targetType: "user", targetId: req.params.id, reason: req.body.reason,
+        meta: { from: u.username, to: req.body.username }, ip: req.ip });
+      await notify(c, req.params.id, "security", { what: "username_changed", username: req.body.username });
     });
     return { ok: true };
   });
