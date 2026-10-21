@@ -96,7 +96,7 @@ async function writeHba() {
 
 let server;
 function startPostgres() {
-  server = spawn(bin("postgres"), ["-D", DATA, "-p", String(PORT), "-c", `unix_socket_directories=${process.platform == "win32" ? "" : DATA}`],
+  server = spawn(bin("postgres"), ["-D", DATA, "-p", String(PORT), "-c", `unix_socket_directories=${process.platform == "win32" ? "" : "/tmp"}`],
     { stdio: ["ignore", "inherit", "inherit"] });
   server.on("exit", code => {
     console.log(`postgres exited (${code})`);
@@ -155,6 +155,8 @@ if (fresh) await initCluster();
 // A crash can leave this lock. Nothing else starts PostgreSQL in this container,
 // and PIDs are reused after a restart, so a lock found at startup is stale.
 rmSync(join(DATA, "postmaster.pid"), { force: true });
+// Older starts kept the socket (and its lock) in the data folder.
+for (const f of ["", ".lock"]) rmSync(join(DATA, `.s.PGSQL.${PORT}${f}`), { force: true });
 await writeHba();
 startPostgres();
 await ensureAppDatabase();
