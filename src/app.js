@@ -1,4 +1,3 @@
-// HTTP layer: plugins, security headers, session handling, routes.
 import Fastify from "fastify";
 import cookie from "@fastify/cookie";
 import rateLimit from "@fastify/rate-limit";
@@ -22,6 +21,8 @@ import donationRoutes, { webhookRoutes } from "./routes/donations.js";
 import reportRoutes from "./routes/reports.js";
 import adminRoutes from "./routes/admin.js";
 import modRoutes, { modAdminRoutes, createZenFetcher, createZenImageFetcher } from "./routes/mods.js";
+import betaRoutes, { licenseRoutes, betaAdminRoutes } from "./routes/beta.js";
+import { betaSettings } from "./services/beta.js";
 
 export const SESSION_COOKIE = "orbit_session";
 const SAFE = new Set(["GET", "HEAD", "OPTIONS"]);
@@ -31,7 +32,6 @@ export async function buildApp({ cfg, pool, logger = true, mailer, stripe, mozil
     logger: logger && { level: cfg.env == "test" ? "warn" : "info", redact: ["req.headers.authorization", "req.headers.cookie", "res.headers['set-cookie']"] },
     trustProxy: cfg.trustProxy,
     bodyLimit: 64 * 1024,
-    // "500" is not a number: no silent type conversion of inputs.
     ajv: { customOptions: { coerceTypes: false, removeAdditional: false } },
   });
   app.decorate("cfg", cfg);
@@ -66,7 +66,6 @@ export async function buildApp({ cfg, pool, logger = true, mailer, stripe, mozil
     if (err instanceof ApiError) return reply.code(err.status).send({ error: err.code, ...(err.extra ?? {}) });
     if (err.validation) return reply.code(400).send({ error: "invalid_input", field: err.validation[0]?.instancePath || err.validation[0]?.params?.missingProperty });
     if (err.statusCode == 429) return reply.code(429).send({ error: "rate_limited" });
-    // Errors from Stripe are ours to log, not the visitor's to read.
     if (String(err.type ?? "").startsWith("Stripe")) {
       req.log.error({ type: err.type, code: err.code }, "payment provider error");
       return reply.code(502).send({ error: "payment_provider_error" });
@@ -76,18 +75,14 @@ export async function buildApp({ cfg, pool, logger = true, mailer, stripe, mozil
     return reply.code(500).send({ error: "server_error" });
   });
 
-  // ---- sessions: an opaque token in an HttpOnly cookie (or a Bearer header for native clients)
   app.decorateRequest("auth", null);
   app.addHook("preHandler", async (req) => {
     if (!req.url.startsWith("/api/")) return;
     const bearer = /^Bearer ([A-Za-z0-9_-]{20,})$/.exec(req.headers.authorization ?? "")?.[1];
     const token = bearer ?? req.cookies[SESSION_COOKIE];
-    // Cookies are sent by the browser on its own: a state change needs our header,
-    // which another site cannot add without a CORS preflight we never allow.
     if (!SAFE.has(req.method) && !bearer && !req.url.startsWith("/api/v1/webhooks/")) {
       if (req.headers["x-orbit-request"] != "1") throw new ApiError(403, "csrf");
       const origin = req.headers.origin;
-      // The browser's own call (privileged, no page origin) uses no cookie identity.
       const noCookieAuth = req.url.split("?")[0] == "/api/v1/auth/mozilla";
       if (origin && origin != new URL(cfg.baseUrl).origin && !noCookieAuth) throw new ApiError(403, "csrf");
     }
@@ -105,7 +100,6 @@ export async function buildApp({ cfg, pool, logger = true, mailer, stripe, mozil
     if (s.status != "active") return;
     const now = Date.now();
     if (now - s.last_seen_at > 5 * 60_000) {
-      // Sliding expiry for "remember me", and the last-activity date.
       await pool.query(
         `UPDATE user_sessions SET last_seen_at = now(),
            expires_at = CASE WHEN remember THEN now() + interval '30 days' ELSE expires_at END WHERE id = $1`, [s.id]);
@@ -126,7 +120,6 @@ export async function buildApp({ cfg, pool, logger = true, mailer, stripe, mozil
     };
   });
 
-  // Guards used by the routes.
   app.decorate("user", (req, { mfa = true, verified = false } = {}) => {
     if (!req.auth) throw new ApiError(401, "unauthenticated");
     if (mfa && !req.auth.session.mfaPassed) throw new ApiError(401, "mfa_required");
@@ -137,7 +130,6 @@ export async function buildApp({ cfg, pool, logger = true, mailer, stripe, mozil
     app.user(req);
     if (!(await req.auth.perms()).has(key)) throw new ApiError(403, "forbidden");
   });
-  // Sensitive actions: the password (and 2FA) confirmed less than 10 minutes ago.
   app.decorate("recentAuth", req => {
     const at = req.auth?.session.reauthAt;
     if (!at || Date.now() - new Date(at) > 10 * 60_000) throw new ApiError(403, "reauth_required");
@@ -161,6 +153,9 @@ export async function buildApp({ cfg, pool, logger = true, mailer, stripe, mozil
     await instance.register(adminRoutes, { prefix: "/admin" });
     await instance.register(modRoutes, { prefix: "/mods" });
     await instance.register(modAdminRoutes, { prefix: "/admin/mods" });
+    await instance.register(betaRoutes, { prefix: "/beta" });
+    await instance.register(licenseRoutes, { prefix: "/license" });
+    await instance.register(betaAdminRoutes, { prefix: "/admin/beta" });
   };
   await app.register(api, { prefix: "/api/v1" });
 
@@ -173,13 +168,13 @@ export async function buildApp({ cfg, pool, logger = true, mailer, stripe, mozil
     turnstileSiteKey: cfg.turnstileSiteKey,
     donations: !!app.stripe,
     mail: app.mailer.configured,
+    beta: await betaSettings(pool),
   }));
 
-  // The web app: one page, routed in the browser.
-  const web = fileURLToPath(new URL("../web/", import.meta.url));
-  await app.register(fastifyStatic, { root: web, prefix: "/assets/", index: false });
+  const web = fileURLToPath(new URL("../web/dist/", import.meta.url));
+  await app.register(fastifyStatic, { root: `${web}assets`, prefix: "/assets/", index: false, maxAge: "7d" });
   app.setNotFoundHandler((req, reply) => {
-    if (req.method == "GET" && !req.url.startsWith("/api/")) return reply.sendFile("index.html", web);
+    if (req.method == "GET" && !req.url.startsWith("/api/") && !req.url.startsWith("/assets/")) return reply.header("Cache-Control", "no-cache").sendFile("index.html", web);
     return reply.code(404).send({ error: "not_found" });
   });
   return app;

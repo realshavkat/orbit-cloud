@@ -1,5 +1,3 @@
-// /api/v1/reports: report a profile or a collection, follow one's reports,
-// appeal a moderation decision.
 import { ApiError, cleanText } from "../lib/validate.js";
 
 const UUID = { type: "string", pattern: "^[0-9a-fA-F-]{36}$" };
@@ -35,7 +33,6 @@ export default async function reportRoutes(app) {
     return { reports: rows };
   });
 
-  // Decisions about me, and appeals.
   app.get("/decisions", async (req) => {
     const me = app.user(req, { mfa: false });
     const { rows } = await db.query(

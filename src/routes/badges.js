@@ -1,4 +1,3 @@
-// /api/v1/badges: public catalog, badge pages and authenticity checks.
 import { ApiError } from "../lib/validate.js";
 import { cards, visibility } from "../services/profiles.js";
 
@@ -33,7 +32,6 @@ export default async function badgeRoutes(app) {
     return { badge, holders_count: n, holders: await cards(db, holders.map(h => h.user_id)) };
   });
 
-  // Is this award real? Anyone can check a badge shown on a profile.
   app.get("/awards/:id", async (req) => {
     if (!/^[0-9a-f-]{36}$/i.test(req.params.id)) throw new ApiError(404, "not_found");
     const { rows: [a] } = await db.query(
@@ -44,7 +42,6 @@ export default async function badgeRoutes(app) {
     const shown = v.level == "self" || (v.level == "full" && v.user.show_badges);
     if (!shown) throw new ApiError(404, "not_found");
     const valid = !a.revoked_at && (!a.expires_at || a.expires_at > new Date());
-    // The source says how it was earned, never an amount.
     return { valid, badge: { key: a.key, name: a.name, official: a.official }, username: v.user.username,
       awarded_at: a.awarded_at, verified: a.verified, source: a.source == "role" ? "official" : a.source };
   });

@@ -34,7 +34,6 @@ test("a backup restores into an empty database with the same data", async () => 
       assert.equal(await count(r, `SELECT COUNT(*)::int AS n FROM ${table}`), await count(ctx.pool, `SELECT COUNT(*)::int AS n FROM ${table}`), table);
     }
     assert.equal((await r.query("SELECT bio FROM user_profiles WHERE user_id = $1", [a.id])).rows[0].bio, "kept by the backup");
-    // Ids keep counting after the restored rows, and the audit log is still append-only.
     await r.query("INSERT INTO admin_audit_logs (action) VALUES ('restore.test')");
     await assert.rejects(r.query("DELETE FROM admin_audit_logs"), /append-only/);
     await r.end();

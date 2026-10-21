@@ -1,4 +1,3 @@
-// /api/v1/users: public profiles, search, discovery, profile images.
 import { ApiError, bad } from "../lib/validate.js";
 import { visibility, fullProfile, cards } from "../services/profiles.js";
 
@@ -19,7 +18,6 @@ export default async function userRoutes(app) {
     return { users: await cards(db, rows.map(r => r.id), me) };
   });
 
-  // Discovery shows only members who chose "appear in suggestions".
   app.get("/discover", async (req) => {
     const me = viewer(req);
     const visible = `u.status = 'active' AND NOT u.profile_hidden AND s.discoverable AND s.profile_public AND NOT s.social_disabled
@@ -27,7 +25,6 @@ export default async function userRoutes(app) {
     const ids = async (sql) => (await db.query(sql, [me])).rows.map(r => r.id);
     const recent = await ids(`SELECT u.id FROM users u JOIN user_privacy_settings s ON s.user_id = u.id WHERE ${visible}
       AND u.created_at > now() - interval '30 days' ORDER BY u.created_at DESC LIMIT 12`);
-    // "Popular" = most friends (documented in the README).
     const popular = await ids(`SELECT u.id FROM users u JOIN user_privacy_settings s ON s.user_id = u.id
       LEFT JOIN friendships f ON f.user_a = u.id OR f.user_b = u.id WHERE ${visible} GROUP BY u.id HAVING COUNT(f.*) > 0 ORDER BY COUNT(f.*) DESC LIMIT 12`);
     const active = await ids(`SELECT u.id FROM users u JOIN user_privacy_settings s ON s.user_id = u.id WHERE ${visible}
@@ -56,7 +53,6 @@ export default async function userRoutes(app) {
       throw new ApiError(404, "not_found");
     }
     const { level } = await visibility(db, viewer(req), m.owner_id);
-    // A private profile shows its avatar (as on its card), not its banner.
     if (!level || (level == "private" && m.kind != "avatar")) throw new ApiError(404, "not_found");
     return sendMedia(reply, m);
   });

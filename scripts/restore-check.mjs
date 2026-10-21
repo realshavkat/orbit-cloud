@@ -1,9 +1,3 @@
-// Restore test: loads the newest backup of ./backups into a scratch database,
-// counts the rows of the main tables, then drops the scratch database.
-// On the database server: type `restore-check` in the console.
-//
-// Real restore (API stopped): CONFIRM_RESTORE=orbit node scripts/restore-check.mjs <backup-folder> --into-orbit
-// empties the "orbit" database first, then loads the backup into it.
 import { join, dirname } from "node:path";
 import pg from "pg";
 import { loadDotEnv } from "../src/config.js";
@@ -32,7 +26,6 @@ try {
     console.log(`${table}: ${rows[0].n}`);
   }
   if (into) {
-    // The API connects as "orbit": it owns what was restored.
     await c.query(`DO $$ DECLARE r record; BEGIN
       FOR r IN SELECT tablename FROM pg_tables WHERE schemaname = 'public' LOOP EXECUTE format('ALTER TABLE public.%I OWNER TO orbit', r.tablename); END LOOP;
       FOR r IN SELECT p.oid::regprocedure AS f FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace LOOP EXECUTE format('ALTER FUNCTION %s OWNER TO orbit', r.f); END LOOP;

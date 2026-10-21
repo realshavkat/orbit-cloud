@@ -1,4 +1,3 @@
-// Test helpers: one app per test file on the shared test database.
 import Stripe from "stripe";
 import { randomBytes } from "node:crypto";
 import { config } from "../src/config.js";
@@ -15,7 +14,6 @@ export async function setup({ withStripe = true, mozilla, zenFetch, zenImage = a
   await migrate(pool);
   const silent = { warn() {}, info() {}, error() {} };
   const mailer = createMailer(cfg, silent);
-  // A real Stripe client: signatures are checked for real, no network is used.
   const stripe = withStripe ? new Stripe("sk_test_dummy") : null;
   const app = await buildApp({ cfg, pool, logger: false, mailer, stripe, mozilla, zenFetch, zenImage });
   await app.ready();
@@ -25,8 +23,6 @@ export async function setup({ withStripe = true, mozilla, zenFetch, zenImage = a
 let n = 0;
 export const uniq = (p = "user") => `${p}${Date.now().toString(36).slice(-5)}${n++}`;
 
-// A small client keeping the session cookie, sending the CSRF header.
-// Each client has its own address, like separate visitors (rate limits are per address).
 export function client(app, ip = `10.${n % 250}.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}`) {
   let cookie = null;
   n++;
@@ -61,7 +57,6 @@ export function client(app, ip = `10.${n % 250}.${Math.floor(Math.random() * 250
   };
 }
 
-// Registers, verifies the e-mail through the outbox link, and returns a signed-in client.
 export async function member(ctx, { username = uniq(), verify = true, password = "correct horse battery" } = {}) {
   const c = client(ctx.app);
   const email = `${username}@example.org`;
@@ -81,7 +76,6 @@ export async function grantRole(pool, userId, role) {
   await pool.query("INSERT INTO user_roles (user_id, role_id) SELECT $1, id FROM roles WHERE key = $2 ON CONFLICT DO NOTHING", [userId, role]);
 }
 
-// Marks the session as freshly re-authenticated (what /auth/reauth does).
 export async function reauth(c) {
   const r = await c.post("/api/v1/auth/reauth", { password: c.password });
   if (r.status != 200) throw new Error(`reauth ${r.status}`);

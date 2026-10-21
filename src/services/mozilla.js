@@ -1,6 +1,3 @@
-// Mozilla account (Firefox Sync) sign-in. The Orbit browser hands us an OAuth
-// access token with the "profile" scope; Mozilla tells us who it belongs to.
-// The token is used once here and never stored.
 import { ApiError } from "../lib/validate.js";
 
 export function createMozillaVerifier(cfg, fetchImpl = fetch) {
@@ -17,8 +14,6 @@ export function createMozillaVerifier(cfg, fetchImpl = fetch) {
     return res.json();
   };
   return async function verify(token) {
-    // Who issued the token and for what: only tokens minted for Firefox/Orbit
-    // count, so a site the user signed into with Mozilla cannot replay its own.
     const info = await call(`${oauthUrl}/v1/verify`, {
       method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ token }),
     });

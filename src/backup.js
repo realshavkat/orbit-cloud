@@ -1,7 +1,3 @@
-// Logical backups without pg_dump (not shipped with the portable binaries):
-// every table copied with COPY (gzip), plus the list of applied migrations.
-// A restore replays the same migrations into an empty database, then loads
-// the data with triggers and foreign keys paused, then fixes the sequences.
 import pg from "pg";
 import { to as copyTo, from as copyFrom } from "pg-copy-streams";
 import { createGzip, createGunzip } from "node:zlib";
@@ -15,14 +11,12 @@ async function tablesOf(c) {
   return rows.map(r => r.tablename);
 }
 
-// conn: pg connection options. Returns the backup folder.
 export async function dump(conn, root) {
   const dir = join(root, `orbit-${new Date().toISOString().replace(/[:.]/g, "-")}`);
   mkdirSync(dir, { recursive: true });
   const c = new pg.Client(conn);
   await c.connect();
   try {
-    // One snapshot for every table.
     await c.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
     const tables = await tablesOf(c);
     for (const t of tables) {
@@ -53,8 +47,6 @@ export function prune(root, keep = 14) {
   for (const old of listBackups(root).slice(0, -keep)) rmSync(join(root, old), { recursive: true, force: true });
 }
 
-// Restores into `conn.database` (which must be empty). Needs a superuser
-// connection: loading pauses triggers with session_replication_role.
 export async function restore(conn, dir) {
   const meta = JSON.parse(readFileSync(join(dir, "meta.json"), "utf8"));
   const pool = new pg.Pool({ ...conn, max: 1 });
@@ -69,13 +61,11 @@ export async function restore(conn, dir) {
     await c.query("BEGIN");
     await c.query("SET LOCAL session_replication_role = replica");
     const tables = await tablesOf(c);
-    // The seed migration filled some tables: the backup's rows replace them.
     await c.query(`TRUNCATE ${tables.map(t => `"${t}"`).join(", ")} CASCADE`);
     for (const t of meta.tables) {
       if (!tables.includes(t)) continue;
       await pipeline(createReadStream(join(dir, `${t}.copy.gz`)), createGunzip(), c.query(copyFrom(`COPY "${t}" FROM STDIN`)));
     }
-    // Serial ids continue after the restored rows.
     const { rows: seqs } = await c.query(
       `SELECT c.relname AS t, a.attname AS col, pg_get_serial_sequence(quote_ident(c.relname), a.attname) AS seq
          FROM pg_class c JOIN pg_attribute a ON a.attrelid = c.oid

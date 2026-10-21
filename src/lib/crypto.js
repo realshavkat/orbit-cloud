@@ -1,7 +1,6 @@
 import { createHash, createHmac, randomBytes, createCipheriv, createDecipheriv, timingSafeEqual } from "node:crypto";
 import argon2 from "argon2";
 
-// ---- opaque tokens: the client keeps the token, the database keeps its SHA-256
 export function newToken(bytes = 32) {
   return randomBytes(bytes).toString("base64url");
 }
@@ -10,7 +9,6 @@ export function hashToken(token) {
   return createHash("sha256").update(String(token)).digest();
 }
 
-// ---- passwords: Argon2id (OWASP parameters)
 const ARGON = { type: argon2.argon2id, memoryCost: 19456, timeCost: 2, parallelism: 1 };
 
 export function hashPassword(password) {
@@ -25,14 +23,12 @@ export async function verifyPassword(hash, password) {
   }
 }
 
-// Same cost as a real check, so a missing account takes as long as a wrong password.
 let dummy;
 export async function burnPasswordCheck(password) {
   dummy ??= await hashPassword("orbit-dummy-password");
   await verifyPassword(dummy, password);
 }
 
-// ---- TOTP (RFC 6238: SHA-1, 30 s, 6 digits)
 const B32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 
 export function base32Encode(buf) {
@@ -77,7 +73,6 @@ export function totpCode(secret, step) {
   return String(n % 1_000_000).padStart(6, "0");
 }
 
-// Returns the matching time step (to refuse its reuse), or null. One step of drift each way.
 export function totpVerify(secret, code, now = Date.now(), lastStep = null) {
   if (!/^\d{6}$/.test(String(code))) return null;
   const step = Math.floor(now / 30_000);
@@ -94,7 +89,6 @@ export function safeEqual(a, b) {
   return x.length == y.length && timingSafeEqual(x, y);
 }
 
-// ---- AES-256-GCM for secrets at rest (TOTP seeds)
 function keyBytes(key) {
   const buf = /^[0-9a-f]{64}$/i.test(key) ? Buffer.from(key, "hex") : Buffer.from(key, "base64");
   if (buf.length != 32) throw new Error("MFA_ENCRYPTION_KEY must be 32 bytes (hex or base64)");
@@ -115,7 +109,6 @@ export function decrypt(key, blob) {
   return Buffer.concat([d.update(data), d.final()]).toString("utf8");
 }
 
-// Recovery codes: 10 codes of 10 characters, shown once, stored hashed.
 export function newRecoveryCodes(n = 10) {
   return Array.from({ length: n }, () => {
     const s = base32Encode(randomBytes(7)).slice(0, 10).toLowerCase();

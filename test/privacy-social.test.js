@@ -16,7 +16,6 @@ test("a member can only change their own profile", async () => {
   const b = await member(ctx);
   await a.patch("/api/v1/me/profile", { bio: "hello" });
   assert.equal((await b.get(`/api/v1/users/${a.username}`)).body.bio, "hello");
-  // There is no route that takes another member's id for profile edits.
   assert.equal((await b.patch(`/api/v1/users/${a.username}`, { bio: "pwned" })).status, 404);
 });
 
@@ -40,7 +39,6 @@ test("a private profile shows nothing but its name to visitors; friends see it",
   assert.equal(seen.body.private, true);
   assert.equal(seen.body.bio, undefined);
   assert.equal(seen.body.badges, undefined);
-  // Friends see it.
   const req = await friend.post("/api/v1/friends/requests", { user_id: a.id });
   await a.post(`/api/v1/friends/requests/${req.body.id}/accept`);
   assert.equal((await friend.get(`/api/v1/users/${a.username}`)).body.bio, "secret bio");
@@ -102,7 +100,6 @@ test("sharing a site needs the setting on, takes only a domain, and can be remov
   assert.equal((await a.post("/api/v1/sites/shared", { domain: "ameli.fr" })).body.error, "domain_sensitive");
   await a.del("/api/v1/sites/shared/example.org");
   assert.equal((await a.get("/api/v1/sites/mine")).body.sites.length, 0);
-  // Turning sharing off hides what was shared and refuses new shares.
   await a.post("/api/v1/sites/shared", { domain: "example.org" });
   await a.patch("/api/v1/me/privacy", { share_sites_enabled: false });
   assert.deepEqual((await client(ctx.app).get(`/api/v1/users/${a.username}`)).body.sites, []);
@@ -154,7 +151,6 @@ test("reports, moderation and appeals", async () => {
   assert.equal((await a.post("/api/v1/reports", { target_type: "user", target_id: bad.id, reason: "spam" })).body.error, "report_exists");
   const list = await mod.get("/api/v1/admin/reports");
   assert.ok(list.body.reports.some(x => x.id == r.body.id));
-  // Moderators see reports, not e-mails, money or the audit log.
   assert.equal((await mod.get("/api/v1/admin/users")).status, 403);
   assert.equal((await mod.get("/api/v1/admin/donations")).status, 403);
   assert.equal((await mod.get("/api/v1/admin/audit")).status, 403);

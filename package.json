@@ -11,7 +11,9 @@
     "start": "node api.mjs",
     "db": "node db.mjs",
     "migrate": "node scripts/migrate.mjs",
-    "test": "node test/run.mjs"
+    "test": "node test/run.mjs",
+    "build": "vite build --config web/vite.config.js",
+    "dev:web": "vite --config web/vite.config.js"
   },
   "license": "MPL-2.0",
   "dependencies": {
@@ -26,5 +28,12 @@
     "pg": "^8.23.1",
     "pg-copy-streams": "^7.0.0",
     "stripe": "^19.3.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^5.2.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "react-router": "^7.18.4",
+    "vite": "^7.3.7"
   }
 }

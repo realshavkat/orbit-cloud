@@ -5,7 +5,6 @@ import { setup, client, member, grantRole } from "./helpers.js";
 import { prepareMod, checkMod, convertZen } from "../src/lib/mods.js";
 
 const ZEN_ID = "a6335949-4465-4b71-926c-4a52d34bc9c0";
-// A 1x1 PNG: the smallest real picture.
 const PNG = Buffer.from("89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d4944415478da63f8ffff3f0005fe02fea7d6a4c70000000049454e44ae426082", "hex");
 const zenFiles = {
   "theme.json": JSON.stringify({ id: ZEN_ID, name: "Nord Night", description: "Nord everywhere", version: "1.4.0",
@@ -63,7 +62,6 @@ test("checks refuse code, remote content and browser settings", () => {
   assert.ok(checkMod({ "chrome.css": "a{}", "evil.js": "alert(1)" }).errors.some(e => e.code == "file_not_allowed"));
   const pref = checkMod({ "chrome.css": "a{}", "preferences.json": JSON.stringify([{ property: "network.proxy.http", type: "string" }]) });
   assert.ok(pref.errors.some(e => e.code == "pref_not_allowed"));
-  // An uploaded (non-Zen) mod with an odd pref name is refused, a Zen one gets it renamed.
   const zenOdd = convertZen({ "chrome.css": "#zen-x{}", "preferences.json": JSON.stringify([{ property: "nord.glow", type: "checkbox" }]) }, "n");
   assert.equal(JSON.parse(zenOdd.files["preferences.json"])[0].property, "orbit.mod.n.nord.glow");
 });
@@ -118,7 +116,6 @@ test("submit, review, list, install; rejected needs a note; packages only after 
   const notes = await author.get("/api/v1/notifications");
   assert.ok(JSON.stringify(notes.body).includes("mod_review"));
 
-  // A new version waits for review; the listed one stays installable meanwhile.
   const v2 = await author.post(`/api/v1/mods/${slug}/versions`, { version: "1.5.0", files: { "chrome.css": "#urlbar { color: red; }" } });
   assert.equal(v2.status, 201);
   assert.equal((await anon.get(`/api/v1/mods/${slug}/package`)).body.version, "1.4.0");
@@ -127,7 +124,6 @@ test("submit, review, list, install; rejected needs a note; packages only after 
   assert.equal((await mod.post(`/api/v1/admin/mods/versions/${item2.id}/review`, { action: "reject", note: "Breaks the address bar" })).status, 200);
   assert.equal((await anon.get(`/api/v1/mods/${slug}/package`)).body.version, "1.4.0", "rejecting an update keeps the listed version");
 
-  // Someone else cannot publish versions of this mod.
   const other = await member(ctx);
   assert.equal((await other.post(`/api/v1/mods/${slug}/versions`, { files: { "chrome.css": "a{}" }, version: "9.0.0" })).status, 404);
 });
@@ -140,7 +136,6 @@ test("Zen package endpoint converts on the fly and refuses unknown ids", async (
   assert.equal((await anon.get("/api/v1/mods/zen/not-an-id/package")).status, 400);
 });
 
-// Builds a .zip (deflate) the way any archiver would.
 function makeZip(entries) {
   const { deflateRawSync, crc32 } = zlib;
   const locals = [], centrals = [];

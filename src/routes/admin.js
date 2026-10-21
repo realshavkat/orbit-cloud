@@ -1,6 +1,3 @@
-// /api/v1/admin: every route checks a permission on the server, whatever the
-// page shows. Roles are ranked: nobody acts on an account of equal or higher
-// rank, nobody changes their own roles, and nobody can make an Owner.
 import { tx } from "../db.js";
 import { ApiError, bad, cleanText, intParam } from "../lib/validate.js";
 import { audit, notify } from "../services/core.js";
@@ -23,7 +20,6 @@ export default async function adminRoutes(app) {
   const db = app.db;
   const perm = (req, key) => app.perm(req, key);
 
-  // The actor must outrank the target.
   async function outrank(req, targetId) {
     if (targetId == req.auth.user.id) throw new ApiError(403, "not_on_self");
     const [mine, theirs] = await Promise.all([rankOf(db, req.auth.user.id), rankOf(db, targetId)]);
@@ -37,7 +33,6 @@ export default async function adminRoutes(app) {
     return { permissions: perms, roles: await req.auth.roles() };
   });
 
-  // ---- dashboard
   app.get("/stats", async (req) => {
     await perm(req, "stats.read");
     const one = async (sql) => (await db.query(sql)).rows[0];
@@ -55,7 +50,6 @@ export default async function adminRoutes(app) {
       appeals_pending: (await one("SELECT COUNT(*)::int AS n FROM moderation_actions WHERE appeal_status = 'pending'")).n,
       webhooks: await one(`SELECT COUNT(*) FILTER (WHERE status = 'failed')::int AS failed, COUNT(*) FILTER (WHERE status = 'pending')::int AS pending FROM payment_webhook_events`),
       services: { database: true, mail: app.mailer.configured, donations: !!app.stripe },
-      // New accounts per day, last 30 days (UTC), zeros included.
       signups: (await db.query(
         `SELECT d::date AS day, COUNT(u.id)::int AS n FROM generate_series(current_date - 29, current_date, interval '1 day') d
            LEFT JOIN users u ON u.created_at >= d AND u.created_at < d + interval '1 day' AND u.status <> 'deleted'
@@ -63,7 +57,6 @@ export default async function adminRoutes(app) {
       mods_pending: (await one("SELECT COUNT(*)::int AS n FROM mod_versions WHERE status = 'pending'")).n,
     };
     if ((await req.auth.perms()).has("donations.read")) {
-      // Gross = amount paid; net = minus refunds. Disputed money counts in neither.
       out.donations = await one(`SELECT COUNT(*) FILTER (WHERE status IN ('succeeded','partially_refunded','refunded'))::int AS confirmed,
         COALESCE(SUM(amount_cents) FILTER (WHERE status IN ('succeeded','partially_refunded','refunded')), 0)::int AS gross_cents,
         COALESCE(SUM(amount_cents - refunded_cents) FILTER (WHERE status IN ('succeeded','partially_refunded')), 0)::int AS net_cents,
@@ -72,7 +65,6 @@ export default async function adminRoutes(app) {
     return out;
   });
 
-  // ---- users
   app.get("/users", async (req) => {
     await perm(req, "users.read");
     const q = String(req.query.q ?? "").trim();
@@ -148,7 +140,6 @@ export default async function adminRoutes(app) {
     return { ok: true };
   });
 
-  // Lost second factor: after an identity check done by the team (see README).
   app.post("/users/:id/reset-mfa", { schema: { ...idParam, body: reasonBody() } }, async (req) => {
     await perm(req, "users.sessions");
     app.recentAuth(req);
@@ -215,7 +206,6 @@ export default async function adminRoutes(app) {
       return { ok: true };
     });
 
-  // ---- badges catalog
   app.get("/badges", async (req) => {
     await perm(req, "badges.award");
     const { rows } = await db.query(
@@ -263,8 +253,6 @@ export default async function adminRoutes(app) {
     await perm(req, "badges.manage");
     const badge = await badgeByKey(db, req.params.key);
     if (!badge) throw new ApiError(404, "badge_not_found");
-    // Official and payment badges and their rules are guarded: their key, protection
-    // and award source cannot change here.
     if (badge.official || badge.protected) {
       await perm(req, "badges.official");
       app.recentAuth(req);
@@ -297,14 +285,13 @@ export default async function adminRoutes(app) {
     return { holders: rows, history };
   });
 
-  // ---- donations
   app.get("/donations", async (req) => {
     await perm(req, "donations.read");
     const status = req.query.status || null;
     const from = req.query.from ? new Date(req.query.from) : null;
     const to = req.query.to ? new Date(req.query.to) : null;
     const { rows } = await db.query(
-      `SELECT d.id, d.amount_cents, d.refunded_cents, d.currency, d.status, d.recurring, d.public_anonymous, d.checkout_ref, d.payment_ref,
+      `SELECT d.id, d.amount_cents, d.refunded_cents, d.currency, d.status, d.recurring, d.purpose, d.public_anonymous, d.checkout_ref, d.payment_ref,
               d.invoice_ref, d.created_at, d.confirmed_at, u.username FROM donations d LEFT JOIN users u ON u.id = d.user_id
         WHERE ($1::text IS NULL OR d.status = $1) AND ($2::timestamptz IS NULL OR d.created_at >= $2) AND ($3::timestamptz IS NULL OR d.created_at < $3)
         ORDER BY d.created_at DESC LIMIT $4`, [status, from, to, intParam(req.query.limit, 100, 1, 500)]);
@@ -363,7 +350,6 @@ export default async function adminRoutes(app) {
     return { ok: true };
   });
 
-  // ---- reports and moderation
   app.get("/reports", async (req) => {
     await perm(req, "reports.read");
     const status = req.query.status || "open";
@@ -431,7 +417,6 @@ export default async function adminRoutes(app) {
         [req.params.id, req.body.decision]);
       if (!m) throw new ApiError(404, "not_found");
       await outrank(req, m.user_id);
-      // An accepted appeal undoes the decision.
       if (req.body.decision == "accepted") {
         if (m.action == "suspend") await c.query("UPDATE users SET status = 'active', suspended_until = NULL WHERE id = $1 AND status = 'suspended'", [m.user_id]);
         if (m.action == "suspend_social") await c.query("UPDATE users SET social_suspended_until = NULL WHERE id = $1", [m.user_id]);
@@ -443,7 +428,6 @@ export default async function adminRoutes(app) {
     return { ok: true };
   });
 
-  // ---- audit log (read only: the table refuses updates and deletes)
   app.get("/audit", async (req) => {
     await perm(req, "audit.read");
     const before = req.query.before ? new Date(req.query.before) : null;

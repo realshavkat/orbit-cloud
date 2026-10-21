@@ -1,7 +1,3 @@
-// One-time owner setup. INITIAL_OWNER_ID (an account id set on the server,
-// never sent by a browser) becomes Owner and receives the Founder badge.
-// Once done, app_settings.owner_bootstrap is set and this never runs again:
-// there is no endpoint that can create an owner.
 import { tx } from "../db.js";
 import { audit } from "./core.js";
 import { awardBadge, syncRoleBadges } from "./badges.js";

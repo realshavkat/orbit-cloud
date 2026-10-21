@@ -1,5 +1,3 @@
-// What one member may see of another. Privacy is decided here, on the
-// server: fields a member hid are never put in the response.
 import { publicBadgesOf } from "./badges.js";
 
 export async function areFriends(db, a, b) {
@@ -9,7 +7,6 @@ export async function areFriends(db, a, b) {
   return rows.length > 0;
 }
 
-// Returns { user, privacy, level } with level "self" | "full" | "private" | null (invisible).
 export async function visibility(db, viewerId, target) {
   const { rows: [u] } = await db.query(
     `SELECT u.id, u.username, u.status, u.profile_hidden, u.created_at, u.last_active_at, s.*
@@ -32,7 +29,6 @@ export function mediaUrl(id) {
   return id ? `/api/v1/users/media/${id}` : null;
 }
 
-// A small card for lists (search, friends, requests, site members).
 export async function cards(db, ids, viewerId = null) {
   if (!ids.length) return [];
   const { rows } = await db.query(
@@ -44,7 +40,6 @@ export async function cards(db, ids, viewerId = null) {
     const badges = r.show_badges ? (await publicBadgesOf(db, r.id)).slice(0, 3).map(({ key, name, icon, color, rarity, official }) => ({ key, name, icon, color, rarity, official })) : [];
     out.push({ id: r.id, username: r.username, display_name: r.display_name, avatar_url: mediaUrl(r.avatar_media_id), theme_color: r.theme_color, badges });
   }
-  // Keep the caller's order.
   return ids.map(id => out.find(c => c.id == id)).filter(Boolean);
 }
 

@@ -1,4 +1,3 @@
-// Shared services: audit log, permissions, notifications.
 import { ApiError } from "../lib/validate.js";
 
 export async function audit(db, { actorId, action, targetType = null, targetId = null, reason = null, meta = {}, ip = null }) {
@@ -7,7 +6,6 @@ export async function audit(db, { actorId, action, targetType = null, targetId =
     [actorId, action, targetType, targetId == null ? null : String(targetId), reason, meta, ip]);
 }
 
-// Permissions come only from user_roles -> role_permissions. Badges never count.
 export async function permissionsOf(db, userId) {
   const { rows } = await db.query(
     `SELECT DISTINCT rp.permission_key AS key FROM user_roles ur
@@ -27,8 +25,6 @@ export function requirePermission(perms, key) {
 
 const NOTIFY_TYPES = ["friend_request", "friend_accepted", "badge", "support_badge", "contribution", "security", "report_update", "news", "moderation", "mod_review"];
 
-// Stored server-side so they survive reconnections; the user's preferences can mute a type
-// (security notifications cannot be muted).
 export async function notify(db, userId, type, data = {}) {
   if (!NOTIFY_TYPES.includes(type)) throw new Error(`unknown notification type ${type}`);
   if (type != "security") {
@@ -43,7 +39,6 @@ export async function getSetting(db, key, fallback = null) {
   return rows.length ? rows[0].value : fallback;
 }
 
-// Is one of the two users blocking the other?
 export async function blockedBetween(db, a, b) {
   const { rows } = await db.query(
     "SELECT 1 FROM user_blocks WHERE (blocker_id = $1 AND blocked_id = $2) OR (blocker_id = $2 AND blocked_id = $1) LIMIT 1", [a, b]);

@@ -1,8 +1,5 @@
-// Configuration from the environment. Secrets never have defaults: a missing
-// secret disables the feature that needs it, it never falls back to a value.
 import { readFileSync, existsSync } from "node:fs";
 
-// .env next to the service, for local use; on Pelican the variables come from the panel.
 export function loadDotEnv(file = new URL("../.env", import.meta.url)) {
   if (!existsSync(file)) return;
   for (const line of readFileSync(file, "utf8").split(/\r?\n/)) {
@@ -21,7 +18,6 @@ export function config(env = process.env) {
     baseUrl,
     databaseUrl: env.DATABASE_URL,
     cookieSecure: secure,
-    // 32 bytes, hex or base64: encrypts TOTP secrets at rest.
     mfaKey: env.MFA_ENCRYPTION_KEY || null,
     trustProxy: env.TRUST_PROXY === "true",
     initialOwnerId: env.INITIAL_OWNER_ID || null,
@@ -36,8 +32,6 @@ export function config(env = process.env) {
       secretKey: env.STRIPE_SECRET_KEY || null,
       webhookSecret: env.STRIPE_WEBHOOK_SECRET || null,
     },
-    // Mozilla accounts: public endpoints, no secret. Client ids whose tokens we accept
-    // (Firefox desktop by default; add the mobile app's id when it exists).
     mozilla: {
       oauthUrl: (env.MOZILLA_OAUTH_URL || "https://oauth.accounts.firefox.com").replace(/\/$/, ""),
       profileUrl: (env.MOZILLA_PROFILE_URL || "https://profile.accounts.firefox.com").replace(/\/$/, ""),

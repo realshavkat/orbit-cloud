@@ -1,4 +1,3 @@
-// /api/v1/notifications: the member's notification center.
 import { ApiError, intParam } from "../lib/validate.js";
 
 export default async function notificationRoutes(app) {
@@ -16,7 +15,6 @@ export default async function notificationRoutes(app) {
     return { notifications: rows, next: rows.length == limit ? rows.at(-1).created_at : null };
   });
 
-  // Cheap enough to poll from the browser's toolbar.
   app.get("/count", { config: { rateLimit: { max: 120, timeWindow: "1 minute" } } }, async (req) => {
     const me = app.user(req);
     const { rows: [r] } = await db.query("SELECT COUNT(*)::int AS n FROM notifications WHERE user_id = $1 AND read_at IS NULL AND archived_at IS NULL", [me.id]);

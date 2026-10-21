@@ -1,8 +1,5 @@
 import nodemailer from "nodemailer";
 
-// Sends through SMTP when it is configured. Without SMTP the message is kept in
-// `outbox`; only NODE_ENV=development prints it (to test sign-up locally).
-// The README explains how to set SMTP up for production.
 export function createMailer(cfg, log) {
   const outbox = [];
   const transport = cfg.mail.host
@@ -17,7 +14,6 @@ export function createMailer(cfg, log) {
         outbox.push({ to, subject, text });
         if (outbox.length > 50) outbox.shift();
         log.warn({ subject }, "mail not sent: SMTP is not configured");
-        // Local development only: the link is needed to test sign-up. Never in production.
         if (cfg.env == "development") log.info(`[dev mail to ${to}]
 ${text}`);
         return;
@@ -27,7 +23,6 @@ ${text}`);
   };
 }
 
-// Short plain-text messages, in French and English.
 export const MAILS = {
   verify: link => ({
     subject: "Orbit — confirme ton adresse e-mail / confirm your e-mail",

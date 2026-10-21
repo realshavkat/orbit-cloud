@@ -1,4 +1,3 @@
-// /api/v1/me: the signed-in member's own account, profile, privacy and security.
 import { createHash, randomBytes } from "node:crypto";
 import { tx } from "../db.js";
 import { ApiError, bad, cleanText, cleanUrl, emailProblem, normalizeEmail, passwordProblem, INTEREST_RE, THEME_COLORS, usernameProblem } from "../lib/validate.js";
@@ -11,7 +10,6 @@ const PRIVACY_KEYS = ["profile_public", "show_badges", "show_activity", "show_co
   "allow_friend_requests", "discoverable", "share_sites_enabled", "show_stats", "social_disabled"];
 const SECTIONS = ["badges", "sites", "collections", "interests", "links"];
 
-// Real image type from the first bytes, never from the file name or the browser.
 export function sniffImage(buf) {
   if (buf.length > 8 && buf.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return "image/png";
   if (buf.length > 3 && buf[0] == 0xff && buf[1] == 0xd8 && buf[2] == 0xff) return "image/jpeg";
@@ -84,7 +82,6 @@ export default async function meRoutes(app) {
     return { ok: true };
   });
 
-  // Avatar or banner: PNG, JPEG, WebP or GIF, checked by content, 2 MB / 4 MB at most.
   app.post("/media/:kind", { config: { rateLimit: { max: 20, timeWindow: "1 hour" } } }, async (req) => {
     const user = app.user(req, { verified: true });
     const kind = req.params.kind;
@@ -161,7 +158,6 @@ export default async function meRoutes(app) {
     return { current: await publicBadgesOf(db, user.id), history: rows };
   });
 
-  // ---- sessions
   app.get("/sessions", async (req) => {
     const user = app.user(req);
     const { rows } = await db.query(
@@ -178,7 +174,6 @@ export default async function meRoutes(app) {
     return { ok: true };
   });
 
-  // ---- password and e-mail
   app.post("/password", { config: { rateLimit: { max: 10, timeWindow: "15 minutes" } },
     schema: { body: { type: "object", required: ["current", "password"], properties: { current: { type: "string", maxLength: 256 }, password: { type: "string", maxLength: 256 } } } } },
   async (req) => {
@@ -189,7 +184,6 @@ export default async function meRoutes(app) {
     if (p) throw bad(p);
     await tx(db, async t => {
       await t.query("UPDATE user_credentials SET password_hash = $2, password_changed_at = now() WHERE user_id = $1", [user.id, await hashPassword(req.body.password)]);
-      // Other devices sign in again; this one stays.
       await t.query("UPDATE user_sessions SET revoked_at = now() WHERE user_id = $1 AND id <> $2 AND revoked_at IS NULL", [user.id, req.auth.session.id]);
     });
     await securityMail(app, db, user.id, "Le mot de passe de ton compte Orbit a été changé. / Your Orbit password was changed.");
@@ -202,7 +196,6 @@ export default async function meRoutes(app) {
     app.recentAuth(req);
     if (emailProblem(req.body.email)) throw bad("email_format");
     const { rows } = await db.query("SELECT 1 FROM users WHERE email_normalized = $1", [normalizeEmail(req.body.email)]);
-    // A taken address gets the same answer; the link simply never comes.
     if (!rows.length) await sendVerification(app, db, user, "change", req.body.email.trim());
     return { ok: true };
   });
@@ -221,7 +214,6 @@ export default async function meRoutes(app) {
     return { ok: true };
   });
 
-  // ---- two-factor authentication (TOTP)
   app.post("/mfa/setup", async (req) => {
     const user = app.user(req);
     app.recentAuth(req);
@@ -277,18 +269,16 @@ export default async function meRoutes(app) {
     return { ok: true };
   });
 
-  // ---- donations of this member
   app.get("/donations", async (req) => {
     const user = app.user(req);
     const { rows } = await db.query(
-      `SELECT id, amount_cents, refunded_cents, currency, status, recurring, public_anonymous, created_at, confirmed_at
+      `SELECT id, amount_cents, refunded_cents, currency, status, recurring, public_anonymous, purpose, created_at, confirmed_at
          FROM donations WHERE user_id = $1 AND status <> 'pending' ORDER BY created_at DESC LIMIT 200`, [user.id]);
     const { rows: subs } = await db.query(
       "SELECT status, amount_cents, currency, current_period_end, canceled_at FROM subscriptions WHERE user_id = $1 ORDER BY created_at DESC", [user.id]);
     return { donations: rows, subscriptions: subs };
   });
 
-  // ---- data export and account deletion (GDPR)
   app.get("/export", { config: { rateLimit: { max: 5, timeWindow: "1 hour" } } }, async (req, reply) => {
     const user = app.user(req);
     const q = async (sql) => (await db.query(sql, [user.id])).rows;
@@ -313,14 +303,12 @@ export default async function meRoutes(app) {
     return data;
   });
 
-  // Deletion keeps only what the law asks to keep (payments, unlinked from the
-  // person's profile) and the audit log; everything social goes away now.
   app.post("/delete", { schema: { body: { type: "object", required: ["password", "confirm"], properties: {
     password: { type: "string", maxLength: 256 }, confirm: { type: "string" }, code: { type: "string" } } } } }, async (req, reply) => {
     const user = app.user(req);
     if (req.body.confirm != user.username) throw bad("confirm_mismatch");
     const { rows: [c] } = await db.query("SELECT password_hash FROM user_credentials WHERE user_id = $1", [user.id]);
-    if (!(await verifyPassword(c.password_hash, req.body.password))) throw new ApiError(401, "invalid_credentials");
+    if (c ? !(await verifyPassword(c.password_hash, req.body.password)) : (app.recentAuth(req), false)) throw new ApiError(401, "invalid_credentials");
     const { rows: owner } = await db.query("SELECT 1 FROM user_roles ur JOIN roles r ON r.id = ur.role_id WHERE ur.user_id = $1 AND r.key = 'owner'", [user.id]);
     if (owner.length) throw new ApiError(409, "owner_cannot_delete");
     await tx(db, async t => {
@@ -332,6 +320,7 @@ export default async function meRoutes(app) {
         "site_collections", "notifications", "user_badges", "email_verification_tokens", "password_reset_tokens", "media"]) {
         await t.query(`DELETE FROM ${table} WHERE ${table == "media" ? "owner_id" : "user_id"} = $1`, [user.id]);
       }
+      await t.query("DELETE FROM mods WHERE owner_id = $1", [user.id]);
       await t.query("DELETE FROM friendships WHERE user_a = $1 OR user_b = $1", [user.id]);
       await t.query("DELETE FROM friend_requests WHERE from_user = $1 OR to_user = $1", [user.id]);
       await t.query("DELETE FROM user_blocks WHERE blocker_id = $1 OR blocked_id = $1", [user.id]);

@@ -49,7 +49,6 @@ test("an ordinary member cannot award badges or roles to anyone, themselves incl
     const r = body ? await a.post(url, body) : await a.get(url);
     assert.equal(r.status, 403, url);
   }
-  // Fields like isAdmin or badge ids in a profile update are rejected.
   const p = await a.patch("/api/v1/me/profile", { isAdmin: true, badges: ["founder"] });
   assert.equal(p.status, 400);
   assert.deepEqual(await badgesOf(a, a.username), []);
@@ -94,11 +93,9 @@ test("concurrent awards of one badge leave one copy", async () => {
 
 test("the Administrator badge follows the role and grants nothing by itself", async () => {
   const target = await member(ctx);
-  // Badge row inserted directly (as if forged): still no admin access.
   await ctx.pool.query("INSERT INTO user_badges (user_id, badge_id, source) SELECT $1, id, 'manual' FROM badges WHERE key = 'administrator'", [target.id]);
   assert.equal((await target.get("/api/v1/admin/stats")).status, 403);
   await ctx.pool.query("UPDATE user_badges SET revoked_at = now() WHERE user_id = $1", [target.id]);
-  // The owner grants the role: the badge comes with it, and leaves with it.
   await reauth(owner);
   assert.equal((await owner.post(`/api/v1/admin/users/${target.id}/roles`, { role: "administrator", action: "grant", reason: "team" })).status, 200);
   assert.ok((await badgesOf(owner, target.username)).includes("administrator"));
@@ -121,9 +118,7 @@ test("nobody can become Owner; an administrator cannot promote anyone to adminis
   assert.equal((await admin.post(`/api/v1/admin/users/${admin.id}/roles`, { role: "moderator", action: "grant", reason: "because" })).status, 403);
   assert.equal((await admin.post(`/api/v1/admin/users/${peer.id}/suspend`, { reason: "peer" })).body.error, "rank_too_low");
   assert.equal((await admin.post(`/api/v1/admin/users/${owner.id}/suspend`, { reason: "coup" })).body.error, "rank_too_low");
-  // A moderator cannot reach any role either.
   assert.equal((await mod.post(`/api/v1/admin/users/${mod.id}/roles`, { role: "moderator", action: "grant", reason: "because" })).status, 403);
-  // Administrators manage moderators.
   const newMod = await member(ctx);
   assert.equal((await admin.post(`/api/v1/admin/users/${newMod.id}/roles`, { role: "moderator", action: "grant", reason: "help" })).status, 200);
 });

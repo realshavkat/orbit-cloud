@@ -1,5 +1,3 @@
-// /api/v1/donations: public info, checkout, customer portal.
-// /api/v1/webhooks/stripe: Stripe events (exported below, registered in app.js).
 import { ApiError, bad } from "../lib/validate.js";
 import { getSetting } from "../services/core.js";
 import { createCheckout, recordWebhook, processEvent, markFailed, MIN_CENTS, MAX_CENTS } from "../services/payments.js";
@@ -35,7 +33,6 @@ export default async function donationRoutes(app) {
     return { url };
   });
 
-  // Stripe customer portal: manage or stop a monthly donation.
   app.post("/portal", async (req) => {
     const user = app.user(req);
     if (!app.stripe) throw new ApiError(503, "donations_not_configured");
@@ -46,8 +43,6 @@ export default async function donationRoutes(app) {
   });
 }
 
-// Webhook: raw body, Stripe signature (with its timestamp tolerance against
-// replays), stored once by event id, then processed in a transaction.
 export async function webhookRoutes(app) {
   const db = app.db;
   app.removeContentTypeParser("application/json");

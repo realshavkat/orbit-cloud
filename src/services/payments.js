@@ -1,10 +1,7 @@
-// Donations through Stripe. A donation counts only once Stripe says so, in a
-// signed webhook; the "thank you" page after checkout changes nothing.
-// Webhook events are stored by their Stripe id: a replay or a duplicate is
-// recognised and skipped, and processing runs in one transaction.
 import Stripe from "stripe";
 import { tx } from "../db.js";
 import { syncSupporterBadges } from "./badges.js";
+import { syncBetaBadge } from "./beta.js";
 
 export const MIN_CENTS = 100;
 export const MAX_CENTS = 100_000;
@@ -14,11 +11,13 @@ export function createStripe(cfg) {
   return new Stripe(cfg.stripe.secretKey);
 }
 
-export async function createCheckout(stripe, db, cfg, { user, amountCents, recurring, anonymous, currency }) {
+export async function createCheckout(stripe, db, cfg, { user, amountCents, recurring, anonymous, currency, purpose = "donation" }) {
   const { rows: [donation] } = await db.query(
-    `INSERT INTO donations (user_id, provider, amount_cents, currency, status, recurring, public_anonymous)
-     VALUES ($1, 'stripe', $2, $3, 'pending', $4, $5) RETURNING id`, [user.id, amountCents, currency, recurring, anonymous]);
-  const price = { currency, unit_amount: amountCents, product_data: { name: recurring ? "Soutien mensuel à Orbit" : "Don à Orbit" } };
+    `INSERT INTO donations (user_id, provider, amount_cents, currency, status, recurring, public_anonymous, purpose)
+     VALUES ($1, 'stripe', $2, $3, 'pending', $4, $5, $6) RETURNING id`, [user.id, amountCents, currency, recurring, anonymous, purpose]);
+  const name = purpose == "beta" ? "Orbit beta access" : recurring ? "Monthly support for Orbit" : "Donation to Orbit";
+  const price = { currency, unit_amount: amountCents, product_data: { name } };
+  const back = purpose == "beta" ? "beta" : "support";
   if (recurring) price.recurring = { interval: "month" };
   const session = await stripe.checkout.sessions.create({
     mode: recurring ? "subscription" : "payment",
@@ -27,14 +26,13 @@ export async function createCheckout(stripe, db, cfg, { user, amountCents, recur
     client_reference_id: donation.id,
     metadata: { donation_id: donation.id, user_id: user.id },
     ...(recurring ? { subscription_data: { metadata: { user_id: user.id } } } : { payment_intent_data: { metadata: { donation_id: donation.id, user_id: user.id } } }),
-    success_url: `${cfg.baseUrl}/support?thanks=1`,
-    cancel_url: `${cfg.baseUrl}/support?canceled=1`,
+    success_url: `${cfg.baseUrl}/${back}?thanks=1`,
+    cancel_url: `${cfg.baseUrl}/${back}?canceled=1`,
   }, { idempotencyKey: `donation-${donation.id}` });
   await db.query("UPDATE donations SET checkout_ref = $2 WHERE id = $1", [donation.id, session.id]);
   return session.url;
 }
 
-// Stores the event once. Returns false when it was already received.
 export async function recordWebhook(db, event) {
   const { rowCount } = await db.query(
     "INSERT INTO payment_webhook_events (id, provider, type, payload) VALUES ($1, 'stripe', $2, $3) ON CONFLICT (id) DO NOTHING",
@@ -67,7 +65,6 @@ async function upsertSubscription(db, sub, userId) {
   return row;
 }
 
-// Applies one verified event. Unknown types are marked "ignored".
 export async function processEvent(pool, eventId) {
   return tx(pool, async db => {
     const { rows: [rec] } = await db.query("SELECT * FROM payment_webhook_events WHERE id = $1 FOR UPDATE", [eventId]);
@@ -83,15 +80,12 @@ export async function processEvent(pool, eventId) {
         const d = await donationBy(db, "checkout_ref", o.id);
         if (!d) break;
         if (o.mode == "subscription") {
-          // The first invoice (invoice.paid) records the money; here only the link.
           if (o.subscription) {
-            // Events can arrive in any order: never overwrite a known status here.
             await db.query(
               `INSERT INTO subscriptions (user_id, provider, provider_sub_id, status) VALUES ($1, 'stripe', $2, 'incomplete')
                ON CONFLICT (provider_sub_id) DO UPDATE SET user_id = COALESCE(subscriptions.user_id, EXCLUDED.user_id)`, [d.user_id, o.subscription]);
             const { rows: [sub] } = await db.query("SELECT id FROM subscriptions WHERE provider_sub_id = $1", [o.subscription]);
             await db.query("UPDATE donations SET subscription_id = $2, updated_at = now() WHERE id = $1", [d.id, sub.id]);
-            // The first invoice may already have recorded this payment.
             const { rows: paid } = await db.query(
               "SELECT 1 FROM donations WHERE subscription_id = $1 AND status = 'succeeded' AND id <> $2 LIMIT 1", [sub.id, d.id]);
             if (paid.length && d.status == "pending") await db.query("UPDATE donations SET status = 'canceled', updated_at = now() WHERE id = $1", [d.id]);
@@ -101,7 +95,6 @@ export async function processEvent(pool, eventId) {
         }
         const paid = o.payment_status == "paid" && event.type != "checkout.session.async_payment_failed";
         const failed = event.type == "checkout.session.async_payment_failed";
-        // The amount is Stripe's, not the one we asked for.
         if (paid && d.status == "pending") {
           await db.query(
             `UPDATE donations SET status = 'succeeded', confirmed_at = now(), amount_cents = $2, currency = $3,
@@ -125,7 +118,6 @@ export async function processEvent(pool, eventId) {
         const { rows: [sub] } = await db.query("SELECT * FROM subscriptions WHERE provider_sub_id = $1", [subId]);
         const userId = sub?.user_id ?? o.subscription_details?.metadata?.user_id ?? o.parent?.subscription_details?.metadata?.user_id ?? null;
         const payRef = o.payment_intent ?? o.charge ?? null;
-        // First invoice: complete the checkout's pending donation; later ones: a new donation.
         let { rows: [d] } = sub ? await db.query(
           `UPDATE donations SET status = 'succeeded', invoice_ref = $2, payment_ref = $3, amount_cents = $4, currency = $5,
              confirmed_at = now(), updated_at = now()
@@ -186,7 +178,10 @@ export async function processEvent(pool, eventId) {
       default:
         handled = false;
     }
-    for (const u of users) await syncSupporterBadges(db, u);
+    for (const u of users) {
+      await syncSupporterBadges(db, u);
+      await syncBetaBadge(db, u);
+    }
     await db.query("UPDATE payment_webhook_events SET status = $2, processed_at = now(), attempts = attempts + 1, error = NULL WHERE id = $1",
       [eventId, handled ? "processed" : "ignored"]);
     return handled ? "processed" : "ignored";

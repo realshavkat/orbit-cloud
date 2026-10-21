@@ -1,10 +1,7 @@
-// Minimal .zip reader for mod uploads: stored and deflated entries only, with
-// hard limits on entry count and unpacked size (no zip bombs).
 import { inflateRawSync } from "node:zlib";
 import { bad } from "./validate.js";
 
 export function readZip(buf, { maxEntries = 40, maxTotal = 2 * 1024 * 1024 } = {}) {
-  // End of central directory: last 22 bytes, or earlier when there is a comment.
   let eocd = -1;
   for (let i = buf.length - 22; i >= Math.max(0, buf.length - 22 - 65535); i--) {
     if (buf.readUInt32LE(i) == 0x06054b50) {

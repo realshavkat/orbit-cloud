@@ -5,7 +5,6 @@ import { createMozillaVerifier } from "../src/services/mozilla.js";
 import { config } from "../src/config.js";
 import { ApiError } from "../src/lib/validate.js";
 
-// Fake Mozilla: a token "moz:<uid>:<email>" is valid, anything else is not.
 const fakeMozilla = async token => {
   const m = /^moz:([^:]+):(.+)$/.exec(token);
   if (!m) throw new ApiError(401, "mozilla_token_invalid");
@@ -42,7 +41,6 @@ test("new Mozilla identity asks for a username, then creates a verified account 
   assert.equal(me.body.mozilla_linked, true);
   assert.equal(me.body.has_password, false);
 
-  // Next time: straight in, same account.
   const again = await client(ctx.app).post("/api/v1/auth/mozilla", { token: tok(uid, email), client: "app" });
   assert.equal(again.body.ok, true);
   assert.equal(again.body.created, false);
@@ -64,21 +62,18 @@ test("web hand-off: browser gets a code, the site redeems it into a cookie sessi
   assert.ok(site.cookie, "site session cookie set");
   assert.equal(ok.body.session, undefined, "token never reaches page script");
   assert.equal((await site.get("/api/v1/me")).status, 200);
-  // Single use.
   assert.equal((await client(ctx.app).post("/api/v1/auth/mozilla/redeem", { code: h.body.code })).status, 400);
 });
 
 test("existing account: linked while signed in, or by the same verified e-mail", async () => {
   const m = await member(ctx);
   const uid = uniq("fxa");
-  // The browser call ignores the site cookie: a cookie alone never links.
   const h = await m.post("/api/v1/auth/mozilla", { token: tok(uid, `other-${uid}@moz.example`) });
   const r = await m.post("/api/v1/auth/mozilla/redeem", { code: h.body.code });
   assert.equal(r.body.ok, true);
   assert.equal(r.body.created, false);
   const { rows } = await ctx.pool.query("SELECT user_id FROM oauth_accounts WHERE provider = 'mozilla' AND provider_user_id = $1", [uid]);
   assert.equal(rows[0].user_id, m.id);
-  // A second Mozilla account cannot take the same Orbit account.
   const fresh = await member(ctx);
   const bearer = { authorization: `Bearer ${fresh.cookie.split("=")[1]}` };
   const a = await fresh.post("/api/v1/auth/mozilla", { token: tok(uniq("fxa"), "x@moz.example"), client: "app" }, bearer);
@@ -88,7 +83,6 @@ test("existing account: linked while signed in, or by the same verified e-mail",
     { authorization: `Bearer ${a.body.session}` });
   assert.equal(two.status, 409);
   assert.equal(two.body.error, "mozilla_already_linked");
-  // A site cookie alone never links (the browser call skips the Origin check).
   const other = await member(ctx);
   const c2 = await other.post("/api/v1/auth/mozilla", { token: tok(uniq("fxa"), `w${uniq()}@moz.example`), client: "app" });
   assert.equal(c2.body.needs_username, true);

@@ -18,7 +18,6 @@ async function send(event, { secret = true } = {}) {
     headers: { "content-type": "application/json", "stripe-signature": secret ? header : "t=1,v1=deadbeef" } });
 }
 
-// A pending donation as checkout would leave it (Stripe itself is not called in tests).
 async function pending(user, cents, recurring = false) {
   const checkout = id("cs");
   await ctx.pool.query(
@@ -35,7 +34,6 @@ const badgesOf = async (u) => (await u.get("/api/v1/me")).body.badges.map(b => b
 test("returning from checkout gives nothing; only a signed webhook confirms a donation", async () => {
   const u = await member(ctx);
   await pending(u, 500);
-  // The success page is just a page.
   assert.deepEqual(await badgesOf(u), []);
   assert.equal((await u.get("/api/v1/me/donations")).body.donations.length, 0);
 });
@@ -79,12 +77,10 @@ test("tiers follow the net total; a refund takes them back", async () => {
   let b = await badgesOf(u);
   assert.ok(b.includes("supporter") && b.includes("supporter_bronze"));
   assert.ok(!b.includes("supporter_silver"));
-  // Partial refund: 3000 - 1000 = 2000 < bronze threshold (2500).
   await send({ id: id("evt"), type: "charge.refunded", data: { object: { payment_intent: pi, amount_refunded: 1000,
     refunds: { data: [{ id: id("re"), amount: 1000, status: "succeeded" }] } } } });
   b = await badgesOf(u);
   assert.ok(b.includes("supporter") && !b.includes("supporter_bronze"));
-  // Full refund: nothing left.
   await send({ id: id("evt"), type: "charge.refunded", data: { object: { payment_intent: pi, amount_refunded: 3000,
     refunds: { data: [{ id: id("re"), amount: 2000, status: "succeeded" }] } } } });
   assert.deepEqual(await badgesOf(u), []);

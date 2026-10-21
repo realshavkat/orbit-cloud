@@ -1,6 +1,3 @@
-// /api/v1/mods: Orbit Mods. Anyone browses and installs listed mods; members
-// submit mods (uploaded files or a Zen mod link, converted to Orbit); staff
-// review every version before it is listed (/api/v1/admin/mods).
 import { createHash } from "node:crypto";
 import { tx } from "../db.js";
 import { ApiError, bad, cleanText } from "../lib/validate.js";
@@ -13,12 +10,10 @@ import { sniffImage } from "./me.js";
 const ZEN_STORE = "https://raw.githubusercontent.com/zen-browser/theme-store/main/themes";
 const UUID_RE = /[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}/i;
 const BIG = { bodyLimit: 1536 * 1024 };
-// Submissions carry screenshots too (6 at most, 3 MB each, base64).
 const HUGE = { bodyLimit: 26 * 1024 * 1024 };
 const MAX_IMAGES = 6;
 const IMAGE_MAX = 3 * 1024 * 1024;
 
-// Zen's official store, by id only: the address is never built from user input.
 export function createZenFetcher(fetchImpl = fetch) {
   const get = async (url, max) => {
     let res;
@@ -46,7 +41,6 @@ export function createZenFetcher(fetchImpl = fetch) {
   };
 }
 
-// The picture of a Zen store mod (themes/<id>/image.png), by id only.
 export function createZenImageFetcher(fetchImpl = fetch) {
   return async id => {
     try {
@@ -79,12 +73,9 @@ export default async function modRoutes(app) {
   const zenCache = new Map();
 
   const filesSchema = { type: "object", additionalProperties: { type: "string" }, maxProperties: 8 };
-  // A mod comes as a .zip (base64), as loose files, or as a Zen store link.
   const sourceProps = { zip: { type: "string", maxLength: 1400 * 1024 }, files: filesSchema, zen: { type: "string", maxLength: 200 },
     images: { type: "array", maxItems: MAX_IMAGES, items: { type: "string", maxLength: Math.ceil(IMAGE_MAX / 3) * 4 + 4 } } };
 
-  // Files from the body, or from Zen's store when a Zen link or id is given.
-  // Pictures: the ones sent apart first, then those found in the zip or on Zen.
   async function loadSource(body) {
     let out;
     if (body.zen) {
@@ -107,7 +98,6 @@ export default async function modRoutes(app) {
     return { ...out, images };
   }
 
-  // Replaces the mod's pictures; the first one is the cover.
   async function setImages(c, mod, bufs) {
     const { rows: old } = await c.query("SELECT media_id FROM mod_images WHERE mod_id = $1", [mod.id]);
     await c.query("DELETE FROM mod_images WHERE mod_id = $1", [mod.id]);
@@ -128,7 +118,6 @@ export default async function modRoutes(app) {
     name: p.meta.name ?? null, description: p.meta.description ?? null, version: p.meta.version ?? null,
   });
 
-  // ---- browsing (public)
   app.get("/", async (req) => {
     const { category, q, sort = "popular" } = req.query;
     const page = Math.max(0, Math.min(50, Number.parseInt(req.query.page ?? "0", 10) || 0));
@@ -185,7 +174,6 @@ export default async function modRoutes(app) {
     };
   });
 
-  // What the browser installs. Only the reviewed version of a listed mod.
   app.get("/:slug/package", { config: { rateLimit: { max: 30, timeWindow: "1 minute" } } }, async (req) => {
     const m = await modBySlug(req.params.slug);
     if (!m || m.status != "listed" || !m.current_version_id) throw new ApiError(404, "not_found");
@@ -193,8 +181,6 @@ export default async function modRoutes(app) {
     return { id: `orbit-${m.slug}`, slug: m.slug, name: m.name, version: m.version, files: m.files };
   });
 
-  // A Zen mod, converted for Orbit, straight from Zen's store (used by the browser
-  // on zen-browser.app). Refused when the checks fail.
   app.get("/zen/:id/package", { config: { rateLimit: { max: 30, timeWindow: "1 minute" } } }, async (req) => {
     const id = UUID_RE.exec(req.params.id)?.[0]?.toLowerCase();
     if (!id || id != req.params.id.toLowerCase()) throw bad("zen_link_invalid");
@@ -208,7 +194,6 @@ export default async function modRoutes(app) {
     return out;
   });
 
-  // ---- submitting
   app.post("/check", { ...BIG, config: { rateLimit: { max: 60, timeWindow: "10 minutes" } },
     schema: { body: { type: "object", properties: sourceProps } } }, async (req) => {
     app.user(req);
@@ -240,7 +225,6 @@ export default async function modRoutes(app) {
     const name = cleanText(req.body.name, 60);
     if (!name || name.length < 2) throw bad("name_invalid");
     const source = await loadSource(req.body);
-    // People need to see what a mod looks like before installing it.
     if (!source.images.length) throw bad("images_required");
     const out = await tx(db, async c => {
       let slug = slugify(name);
@@ -284,7 +268,6 @@ export default async function modRoutes(app) {
   });
 }
 
-// /api/v1/admin/mods: the review queue.
 export async function modAdminRoutes(app) {
   const db = app.db;
   const guard = req => app.perm(req, "mods.review");

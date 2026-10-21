@@ -1,5 +1,3 @@
-// /api/v1/auth: sign-up, e-mail verification, sign-in (with 2FA), sessions,
-// password reset. Error messages never say whether an account exists.
 import { tx } from "../db.js";
 import { ApiError, bad, usernameProblem, emailProblem, normalizeEmail, passwordProblem } from "../lib/validate.js";
 import { newToken, hashToken, hashPassword, verifyPassword, burnPasswordCheck, totpVerify, decrypt, hashRecoveryCode } from "../lib/crypto.js";
@@ -16,7 +14,6 @@ export async function createSession(app, req, reply, userId, { remember = false,
     `INSERT INTO user_sessions (user_id, token_hash, remember, mfa_passed, ip, user_agent, expires_at, reauth_at)
      VALUES ($1, $2, $3, $4, $5, $6, $7, CASE WHEN $4 THEN now() END)`,
     [userId, hashToken(token), remember, mfaPassed, req.ip, String(req.headers["user-agent"] ?? "").slice(0, 300), new Date(Date.now() + (mfaPassed ? ttl : 10 * 60_000))]);
-  // Apps (mobile, the browser itself) send the token as a Bearer header instead.
   if (cookie) {
     reply.setCookie(SESSION_COOKIE, token, {
       path: "/", httpOnly: true, sameSite: "lax", secure: app.cfg.cookieSecure,
@@ -46,7 +43,6 @@ async function securityMail(app, db, userId, what) {
   if (u?.on) await app.mailer.send({ to: u.email, ...MAILS.security(what) }).catch(e => app.log.error(e, "security mail"));
 }
 
-// Brute-force limits: per account and per address, over 15 minutes.
 async function tooManyAttempts(db, keys) {
   const { rows } = await db.query(
     `SELECT key, COUNT(*)::int AS n FROM login_attempts WHERE key = ANY($1) AND NOT success AND created_at > now() - interval '15 minutes' GROUP BY key`,
@@ -91,7 +87,6 @@ export default async function authRoutes(app) {
       accept_terms: { type: "boolean" }, website: { type: "string" }, turnstile: { type: "string" } } } },
   }, async (req, reply) => {
     const { username, email, password, accept_terms: accepted, website, turnstile } = req.body;
-    // A field people never see: only robots fill it.
     if (website) throw bad("rejected");
     if (!accepted) throw bad("terms_required");
     const p = usernameProblem(username) ?? emailProblem(email) ?? passwordProblem(password, { username, email });
@@ -102,7 +97,6 @@ export default async function authRoutes(app) {
       const { rows: taken } = await c.query("SELECT username_lower = lower($1) AS name FROM users WHERE username_lower = lower($1) OR email_normalized = $2",
         [username, normalizeEmail(email)]);
       if (taken.some(t => t.name)) throw new ApiError(409, "username_taken");
-      // Same answer as success when the e-mail is taken: the address owner gets a hint by mail instead.
       if (taken.length) return null;
       const { rows: [u] } = await c.query(
         "INSERT INTO users (username, email, email_normalized) VALUES ($1, $2, $3) RETURNING id, username, email",
@@ -179,7 +173,6 @@ export default async function authRoutes(app) {
     return { ok: true, mfa_required: u.mfa };
   });
 
-  // Second step: a TOTP code, or a one-time recovery code.
   app.post("/mfa", {
     ...strict(20),
     schema: { body: { type: "object", properties: { code: { type: "string", maxLength: 6 }, recovery_code: { type: "string", maxLength: 20 } } } },
@@ -198,7 +191,6 @@ export default async function authRoutes(app) {
     return { ok: true };
   });
 
-  // Confirms the password again before a sensitive action (10 minutes).
   app.post("/reauth", {
     ...strict(20),
     schema: { body: { type: "object", required: ["password"], properties: { password: { type: "string", maxLength: 256 }, code: { type: "string", maxLength: 6 } } } },
@@ -207,7 +199,6 @@ export default async function authRoutes(app) {
     const keys = [`reauth:${user.id}`];
     if (await tooManyAttempts(db, keys)) throw new ApiError(429, "too_many_attempts");
     const { rows: [c] } = await db.query("SELECT password_hash FROM user_credentials WHERE user_id = $1", [user.id]);
-    // Accounts made with a Mozilla account confirm by signing in again from Orbit.
     if (!c) throw new ApiError(403, "no_password");
     const { rows: mfa } = await db.query("SELECT 1 FROM user_mfa_methods WHERE user_id = $1 AND confirmed_at IS NOT NULL", [user.id]);
     let ok = await verifyPassword(c.password_hash, req.body.password);
@@ -218,10 +209,6 @@ export default async function authRoutes(app) {
     return { ok: true };
   });
 
-  // ---- Mozilla account (Firefox Sync)
-  // Signs in, links or creates the Orbit account tied to a verified Mozilla identity.
-  // An unlinked identity goes, in order, to: the Orbit account signed in now, the
-  // account with the same verified e-mail, or a new account (needs a username).
   async function mozillaSignIn(req, reply, { uid, email }, body, { cookie, current }) {
     const outcome = await tx(db, async c => {
       const { rows: [linked] } = await c.query(
@@ -230,7 +217,6 @@ export default async function authRoutes(app) {
       let userId = current?.session.mfaPassed ? current.user.id : null;
       if (!userId) {
         const { rows: [same] } = await c.query("SELECT id, email_verified_at FROM users WHERE email_normalized = $1", [normalizeEmail(email)]);
-        // Anyone can sign up with an address they do not own: only a verified one is trusted.
         if (same && !same.email_verified_at) throw new ApiError(409, "email_in_use");
         userId = same?.id ?? null;
       }
@@ -278,17 +264,12 @@ export default async function authRoutes(app) {
 
   const mozillaBody = { username: { type: "string", maxLength: 24 }, accept_terms: { type: "boolean" }, remember: { type: "boolean" } };
 
-  // Called by the browser (or a mobile app) with a Mozilla OAuth token.
-  //   client "app": signs in right away and answers with a Bearer session token.
-  //   client "web" (default): answers with a one-time code the browser opens on
-  //   the site (/connect?code=...), so the session lands in the site's cookie.
   app.post("/mozilla", {
     ...strict(20),
     schema: { body: { type: "object", required: ["token"], properties: {
       token: { type: "string", minLength: 10, maxLength: 4096 }, client: { enum: ["web", "app"] }, ...mozillaBody } } },
   }, async (req, reply) => {
     const identity = await app.mozilla(req.body.token);
-    // Cookies are ignored here (this call skips the Origin check): only a Bearer session links.
     const bearer = /^Bearer /.test(req.headers.authorization ?? "") ? req.auth : null;
     if (req.body.client == "app") return mozillaSignIn(req, reply, identity, req.body, { cookie: false, current: bearer });
     const code = newToken();
@@ -299,7 +280,6 @@ export default async function authRoutes(app) {
     return { ok: true, code };
   });
 
-  // The site side of the hand-off. Not spent while a username is still needed.
   app.post("/mozilla/redeem", {
     ...strict(30),
     schema: { body: { type: "object", required: ["code"], properties: { code: { type: "string", maxLength: 100 }, ...mozillaBody } } },
@@ -335,7 +315,6 @@ export default async function authRoutes(app) {
           [u.id, hashToken(token)]);
         await app.mailer.send({ to: u.email, ...MAILS.reset(`${app.cfg.baseUrl}/reset?token=${token}`) });
       }
-      // Same answer whether the address is known or not.
       return { ok: true };
     });
 
@@ -351,12 +330,10 @@ export default async function authRoutes(app) {
       const { rows: [u] } = await c.query("SELECT username, email FROM users WHERE id = $1", [t.user_id]);
       const p = passwordProblem(req.body.password, u);
       if (p) throw bad(p);
-      // Also how an account made with a Mozilla account gets its first password.
       await c.query(
         `INSERT INTO user_credentials (user_id, password_hash) VALUES ($1, $2)
          ON CONFLICT (user_id) DO UPDATE SET password_hash = EXCLUDED.password_hash, password_changed_at = now()`,
         [t.user_id, await hashPassword(req.body.password)]);
-      // Every other reset link and every session ends with the old password.
       await c.query("UPDATE password_reset_tokens SET used_at = now() WHERE user_id = $1 AND used_at IS NULL", [t.user_id]);
       await c.query("UPDATE user_sessions SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL", [t.user_id]);
       return t.user_id;
@@ -379,7 +356,6 @@ export async function checkSecondFactor(app, db, userId, { code, recovery_code: 
   if (!m || !app.cfg.mfaKey) return false;
   const step = totpVerify(decrypt(app.cfg.mfaKey, m.secret_enc), code, Date.now(), m.last_step == null ? null : Number(m.last_step));
   if (step == null) return false;
-  // A code works once.
   const { rowCount } = await db.query("UPDATE user_mfa_methods SET last_step = $2 WHERE id = $1 AND (last_step IS NULL OR last_step < $2)", [m.id, step]);
   return rowCount == 1;
 }

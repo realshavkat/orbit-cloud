@@ -1,11 +1,7 @@
-// /api/v1/sites: sites a member chose to share, collections, and the members
-// who shared a site. Nothing here comes from browsing history: each row is a
-// domain someone added on purpose, and sharing is off until they turn it on.
 import { tx } from "../db.js";
 import { ApiError, bad, cleanDomain, cleanText, cleanUrl } from "../lib/validate.js";
 import { cards } from "../services/profiles.js";
 
-// Below this many members, a site shows no count and no list (k-anonymity).
 export const SITE_MIN_MEMBERS = 3;
 const UUID = { type: "string", pattern: "^[0-9a-fA-F-]{36}$" };
 
@@ -23,7 +19,6 @@ export default async function siteRoutes(app) {
     return { sharing_enabled: p.share_sites_enabled, sites, collections };
   });
 
-  // Explicit share of one domain. Refused while sharing is off.
   app.post("/shared", { config: { rateLimit: { max: 60, timeWindow: "1 hour" } },
     schema: { body: { type: "object", required: ["domain"], properties: { domain: { type: "string", maxLength: 300 }, note: { type: ["string", "null"] } } } } },
   async (req, reply) => {
@@ -47,7 +42,6 @@ export default async function siteRoutes(app) {
     return { ok: true };
   });
 
-  // Members who shared a domain: visible profiles only, and only above the threshold.
   app.get("/domain/:domain", async (req) => {
     let domain;
     try {
@@ -68,7 +62,6 @@ export default async function siteRoutes(app) {
     return { domain, count: rows.length, members: await cards(db, rows.map(r => r.id), me), shared_by_me: mine };
   });
 
-  // ---- collections
   const collectionBody = { type: "object", properties: {
     title: { type: "string", maxLength: 60 }, description: { type: ["string", "null"], maxLength: 280 }, public: { type: "boolean" },
     items: { type: "array", maxItems: 50, items: { type: "object", required: ["url"], properties: { url: { type: "string" }, title: { type: ["string", "null"] } } } },

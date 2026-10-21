@@ -1,4 +1,3 @@
-// /api/v1/friends: requests, friendships and blocks.
 import { tx } from "../db.js";
 import { ApiError } from "../lib/validate.js";
 import { notify, blockedBetween } from "../services/core.js";
@@ -38,7 +37,6 @@ export default async function friendRoutes(app) {
     const id = await tx(db, async c => {
       const { rows: [t] } = await c.query(
         `SELECT u.status, s.allow_friend_requests, s.social_disabled, u.profile_hidden FROM users u JOIN user_privacy_settings s ON s.user_id = u.id WHERE u.id = $1`, [to]);
-      // Blocked, suspended or closed accounts all answer "unavailable".
       if (!t || t.status != "active" || t.profile_hidden || t.social_disabled || !t.allow_friend_requests || (await blockedBetween(c, me.id, to))) {
         throw new ApiError(403, "request_unavailable");
       }
@@ -46,7 +44,6 @@ export default async function friendRoutes(app) {
       if (mine.social_disabled) throw new ApiError(403, "social_disabled");
       const [a, b] = pair(me.id, to);
       if ((await c.query("SELECT 1 FROM friendships WHERE user_a = $1 AND user_b = $2", [a, b])).rows.length) throw new ApiError(409, "already_friends");
-      // The other person already asked: this accepts it.
       const { rows: [back] } = await c.query("SELECT id FROM friend_requests WHERE from_user = $1 AND to_user = $2 AND status = 'pending' FOR UPDATE", [to, me.id]);
       if (back) {
         await c.query("UPDATE friend_requests SET status = 'accepted', responded_at = now() WHERE id = $1", [back.id]);
@@ -97,7 +94,6 @@ export default async function friendRoutes(app) {
     return { ok: true };
   });
 
-  // Blocking ends the friendship and any pending request, both ways.
   app.post("/blocks", { schema: { body: { type: "object", required: ["user_id"], properties: { user_id: UUID } } } }, async (req) => {
     const me = app.user(req);
     const other = req.body.user_id;

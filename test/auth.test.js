@@ -30,7 +30,6 @@ test("valid sign-up creates an unverified account, then e-mail verification", as
   assert.equal((await c.post("/api/v1/auth/verify-email", { token: tokenFrom(mail) })).status, 200);
   me = await c.get("/api/v1/me");
   assert.equal(me.body.verified, true);
-  // A verification link works once.
   assert.equal((await c.post("/api/v1/auth/verify-email", { token: tokenFrom(mail) })).status, 400);
 });
 
@@ -44,7 +43,6 @@ test("sign-up rejects bad e-mails, taken and reserved usernames, weak passwords"
   assert.equal((await c.post("/api/v1/auth/register", { ...base, username: "admin", email: `${uniq()}@example.org` })).body.error, "username_reserved");
   assert.equal((await c.post("/api/v1/auth/register", { username: uniq(), email: `${uniq()}@example.org`, password: "short", accept_terms: true })).body.error, "password_short");
   assert.equal((await c.post("/api/v1/auth/register", { ...base, username: uniq(), email: `${uniq()}@example.org`, accept_terms: false })).body.error, "terms_required");
-  // Honeypot field filled: refused.
   assert.equal((await c.post("/api/v1/auth/register", { ...base, username: uniq(), email: `${uniq()}@example.org`, website: "http://spam" })).status, 400);
 });
 
@@ -103,12 +101,9 @@ test("password reset: one use, expires, signs out every session", async () => {
   const token = tokenFrom(ctx.mailer.outbox.findLast(m => m.to == a.email && /mot de passe|password/i.test(m.subject)));
   assert.equal((await c.post("/api/v1/auth/reset", { token, password: "a brand new passphrase" })).status, 200);
   assert.equal((await c.post("/api/v1/auth/reset", { token, password: "another new passphrase" })).body.error, "token_invalid");
-  // The old session is gone.
   assert.equal((await a.get("/api/v1/me")).status, 401);
   assert.equal((await c.post("/api/v1/auth/login", { login: a.username, password: "a brand new passphrase" })).status, 200);
-  // Unknown address: same answer.
   assert.equal((await c.post("/api/v1/auth/forgot", { email: `${uniq()}@example.org` })).status, 200);
-  // Expired token.
   await c.post("/api/v1/auth/forgot", { email: a.email });
   const t2 = tokenFrom(ctx.mailer.outbox.findLast(m => m.to == a.email && /mot de passe|password/i.test(m.subject)));
   await ctx.pool.query("UPDATE password_reset_tokens SET expires_at = now() - interval '1 minute' WHERE used_at IS NULL");

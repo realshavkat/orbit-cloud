@@ -1,12 +1,7 @@
-// Mod packages: checks before review, and Zen -> Orbit conversion.
-// A mod is Zen's folder format: theme.json, chrome.css, preferences.json, readme.md.
-// It is CSS only: anything that runs code or loads from the network is refused.
-
 export const MOD_FILES = ["theme.json", "chrome.css", "preferences.json", "readme.md"];
 const LIMITS = { "theme.json": 16 * 1024, "chrome.css": 1024 * 1024, "preferences.json": 64 * 1024, "readme.md": 64 * 1024 };
 export const CATEGORIES = ["tabs", "sidebar", "colors", "layout", "other"];
 
-// Zen's interface -> Orbit's. Selectors and variables Orbit has an equivalent for.
 const ZEN_SELECTORS = [
   ["#zen-sidebar-top-buttons", "#orbit-sidebar-header"],
   ["#zen-sidebar-bottom-buttons", "#orbit-sidebar-footer"],
@@ -37,11 +32,8 @@ const ZEN_VARIABLES = [
   ["--zen-sidebar-width", "--orbit-sidebar-width"],
   ["--zen-toolbar-height", "--orbit-toolbox-height"],
 ];
-// Zen's own preferences that a mod may read, and Orbit's equivalent.
 const ZEN_PREFS = [["zen.view.compact", "orbit.view.compact"]];
 
-// Preferences a mod may declare (they become switches in Orbit's settings):
-// only names that belong to mods, never a browser setting.
 const PREF_RE = /^[A-Za-z0-9_.-]{3,80}$/;
 const PREF_PREFIXES = ["orbit.mod.", "theme.", "mod.", "uc."];
 const PREF_TYPES = new Set(["checkbox", "dropdown", "string"]);
@@ -54,7 +46,6 @@ export function isZenMod(files, meta) {
   return /zen-browser|theme-store/.test(JSON.stringify(meta ?? {})) || /--zen-|#zen-|\.zen-|\[zen-|zen\.[a-z]/.test(css + (files["preferences.json"] ?? ""));
 }
 
-// Rewrites Zen names to Orbit's. Returns the new files and what changed.
 export function convertZen(files, slug) {
   let css = files["chrome.css"] ?? "";
   const report = { selectors: 0, variables: 0, prefs: [], unsupported: [] };
@@ -73,8 +64,6 @@ export function convertZen(files, slug) {
     } catch {}
   }
   const renames = [...ZEN_PREFS];
-  // The mod's own options (zen.* or any other name) move under orbit.mod.<slug>.
-  // so they can never reach a browser setting.
   for (const p of Array.isArray(prefs) ? prefs : []) {
     const name = p?.property;
     if (typeof name != "string" || !PREF_RE.test(name) || ZEN_PREFS.some(([f]) => f == name)) continue;
@@ -90,14 +79,12 @@ export function convertZen(files, slug) {
     if (declared) for (const p of prefs) if (p.property == from) p.property = to;
     if (n || declared) report.prefs.push({ from, to });
   }
-  // Whatever still names Zen has no Orbit equivalent: it stays, inert, and is listed.
   report.unsupported = [...new Set(css.match(/(?:#zen-|\.zen-|\[zen-|--zen-)[\w-]+/g) ?? [])].slice(0, 30);
   const out = { ...files, "chrome.css": `/* Converted from a Zen mod by Orbit */\n${css}` };
   if (prefs) out["preferences.json"] = JSON.stringify(prefs, null, 2);
   return { files: out, report };
 }
 
-// Allowed url(): images inside the mod or the browser, never the network.
 function badUrl(raw) {
   const u = raw.trim().replace(/^["']|["']$/g, "").trim();
   if (/^data:image\/(png|jpeg|gif|webp);/i.test(u)) return null;
@@ -115,10 +102,9 @@ function badUrl(raw) {
   }
   if (/^(chrome|moz-icon|resource):\/\//i.test(u)) return null;
   if (/^[a-z][\w+.-]*:/i.test(u) || u.startsWith("//")) return "remote_content";
-  return null; // relative path: a file of the mod itself
+  return null;
 }
 
-// Checks a package. errors block the submission; warnings go to the reviewer.
 export function checkMod(files) {
   const errors = [], warnings = [];
   for (const name of Object.keys(files)) {
@@ -167,7 +153,6 @@ export function checkMod(files) {
   return { errors, warnings, meta, prefs };
 }
 
-// The whole pipeline for a submission: convert Zen mods, then check.
 export function prepareMod(files, slug) {
   const original = files;
   const meta0 = (() => {
@@ -188,9 +173,6 @@ export function prepareMod(files, slug) {
 
 const IMAGE_TYPES = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", webp: "image/webp", gif: "image/gif", svg: "image/svg+xml" };
 
-// An uploaded .zip -> mod files. One top folder is fine; system junk is skipped.
-// Images the CSS uses are inlined as data: URIs, so the mod stays one stylesheet;
-// preview.(png|jpg|webp) at the top and screenshots/* become the store pictures.
 export function filesFromZip(entries) {
   const names = Object.keys(entries).filter(n => !/(^|\/)(__MACOSX|\.DS_Store|Thumbs\.db)(\/|$)/.test(n));
   const top = names.length && names.every(n => n.includes("/")) && new Set(names.map(n => n.split("/")[0])).size == 1
@@ -204,7 +186,7 @@ export function filesFromZip(entries) {
     else if (/^preview\.(png|jpe?g|webp)$/i.test(name)) shots.unshift(entries[full]);
     else if (/^screenshots\/[^/]+\.(png|jpe?g|webp)$/i.test(name)) shots.push(entries[full]);
     else if (IMAGE_TYPES[ext]) images[name] = `data:${IMAGE_TYPES[ext]};base64,${entries[full].toString("base64")}`;
-    else files[name] = ""; // listed so the check names it as not allowed
+    else files[name] = "";
   }
   if (files["chrome.css"]) {
     const used = new Set();

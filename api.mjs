@@ -1,4 +1,3 @@
-// Orbit community API. Start: node api.mjs (Pelican: the Node.js server's startup).
 import { loadDotEnv, config } from "./src/config.js";
 import { createPool, migrate } from "./src/db.js";
 import { buildApp } from "./src/app.js";
@@ -15,7 +14,6 @@ const applied = await migrate(pool);
 if (applied.length) app.log.info({ applied }, "migrations applied");
 await bootstrapOwner(pool, cfg.initialOwnerId, app.log);
 
-// Housekeeping: expired badges hourly; old login attempts, tokens and sessions daily.
 const hourly = setInterval(() => expireBadges(pool).catch(e => app.log.error(e)), 3600_000);
 const daily = setInterval(async () => {
   try {
@@ -39,7 +37,6 @@ const stop = async () => {
 };
 process.on("SIGTERM", stop);
 process.on("SIGINT", stop);
-// Pelican sends "stop" on stdin.
 process.stdin.on("data", d => String(d).trim() == "stop" && stop());
 
 await app.listen({ port: cfg.port, host: cfg.host });

@@ -1,6 +1,3 @@
-// Badge engine. Every award and revocation goes through here, inside the
-// caller's transaction, and leaves a badge_award_events row. The unique index
-// on (user, badge) where not revoked makes a double award impossible.
 import { ApiError } from "../lib/validate.js";
 import { getSetting, notify } from "./core.js";
 
@@ -9,7 +6,6 @@ export async function badgeByKey(db, key) {
   return rows[0] ?? null;
 }
 
-// Badges past their end date are closed before any award, so they can be won again.
 export async function expireBadges(db, userId = null) {
   const { rows } = await db.query(
     `UPDATE user_badges SET revoked_at = now(), revoke_reason = 'expired'
@@ -22,11 +18,6 @@ export async function expireBadges(db, userId = null) {
   return rows.length;
 }
 
-/**
- * source: auto | manual | payment | event | contribution | bootstrap | role
- * allowOfficial: the caller checked the badges.official permission.
- * Returns the new user_badges row, or null when the user already has the badge.
- */
 export async function awardBadge(db, { userId, badgeKey, source, actorId = null, reason = null, allowOfficial = false, notifyUser = true }) {
   const badge = await badgeByKey(db, badgeKey);
   if (!badge) throw new ApiError(404, "badge_not_found");
@@ -76,7 +67,8 @@ async function hasBadge(db, userId, key) {
   return rows.length > 0;
 }
 
-// Award or revoke so the badge matches `want`. Only touches badges given by `source`.
+export const syncBadge = (...a) => ensure(...a);
+
 async function ensure(db, userId, key, want, source, reason) {
   const badge = await badgeByKey(db, key);
   if (!badge || badge.status != "active") return;
@@ -89,31 +81,25 @@ async function ensure(db, userId, key, want, source, reason) {
   }
 }
 
-/**
- * Supporter badges follow confirmed money only, net of refunds (the rule shown
- * on the support page). Disputed and pending payments count for nothing.
- */
 export async function syncSupporterBadges(db, userId) {
   if (!userId) return;
   const { rows: [t] } = await db.query(
     `SELECT COALESCE(SUM(amount_cents - refunded_cents), 0)::int AS net,
             COUNT(*) FILTER (WHERE amount_cents - refunded_cents > 0)::int AS paid,
             MIN(confirmed_at) FILTER (WHERE amount_cents - refunded_cents > 0) AS first_at
-       FROM donations WHERE user_id = $1 AND status IN ('succeeded', 'partially_refunded')`, [userId]);
+       FROM donations WHERE user_id = $1 AND purpose = 'donation' AND status IN ('succeeded', 'partially_refunded')`, [userId]);
   await ensure(db, userId, "supporter", t.paid > 0, "payment", "donation");
   const { rows: tiers } = await db.query("SELECT badge_key, threshold_cents FROM supporter_tiers ORDER BY sort");
   for (const tier of tiers) await ensure(db, userId, tier.badge_key, t.net >= tier.threshold_cents, "payment", "donation total");
   const { rows: subs } = await db.query(
     "SELECT 1 FROM subscriptions WHERE user_id = $1 AND status IN ('active', 'trialing') LIMIT 1", [userId]);
   await ensure(db, userId, "supporter_monthly", subs.length > 0, "payment", subs.length ? "monthly support" : "monthly support ended");
-  // Early Supporter is permanent once earned within the period.
   const until = await getSetting(db, "early_supporter_until");
   if (until && t.first_at && t.first_at < new Date(until) && !(await hasBadge(db, userId, "early_supporter"))) {
     await awardBadge(db, { userId, badgeKey: "early_supporter", source: "payment", reason: "donation during the early period" });
   }
 }
 
-// Staff badges follow roles: they show the role, they never grant it.
 export async function syncRoleBadges(db, userId) {
   const { rows } = await db.query("SELECT r.key FROM user_roles ur JOIN roles r ON r.id = ur.role_id WHERE ur.user_id = $1", [userId]);
   const roles = new Set(rows.map(r => r.key));

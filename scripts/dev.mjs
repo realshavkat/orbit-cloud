@@ -1,4 +1,3 @@
-// Local development: a persistent PostgreSQL in ./.dev-pg and the API on :8790.
 import EmbeddedPostgres from "embedded-postgres";
 import { existsSync } from "node:fs";
 import { spawn } from "node:child_process";

@@ -1,13 +1,3 @@
-// PostgreSQL for Orbit, run from portable binaries (the embedded-postgres
-// package) so it works on a plain Node.js server without root.
-// First start: creates the cluster, the "orbit" database and its own role
-// (not a superuser), scram-sha-256 passwords, connections only from private
-// networks. Then: a dump every night, the 14 last kept in ./backups.
-//
-// Variables (Pelican panel, never in Git):
-//   PG_SUPERUSER_PASSWORD  admin password, used only here
-//   PG_APP_PASSWORD        password of the "orbit" role the API uses
-//   SERVER_PORT            port given by Pelican (the allocation)
 import { existsSync, rmSync } from "node:fs";
 import { readFile, symlink } from "node:fs/promises";
 import { join, dirname, relative } from "node:path";
@@ -28,16 +18,13 @@ if (!SUPER || SUPER.length < 24 || !APP || APP.length < 24) {
   process.exit(1);
 }
 
-// The binaries for this platform, from the embedded-postgres package.
 const pkg = `@embedded-postgres/${process.platform == "win32" ? "windows" : process.platform}-${process.arch}`;
 const NATIVE = join(ROOT, "node_modules", pkg, "native");
 const bin = name => join(NATIVE, "bin", process.platform == "win32" ? `${name}.exe` : name);
 
-// npm may skip the package's install script; its library links are rebuilt here.
 async function hydrateSymlinks() {
   const file = join(NATIVE, "pg-symlinks.json");
   if (!existsSync(file)) return;
-  // Paths are relative to the package folder; each link sits next to its library.
   const base = dirname(NATIVE);
   for (const { source, target } of JSON.parse(await readFile(file, "utf8"))) {
     const link = join(base, target);
@@ -76,9 +63,6 @@ async function initCluster() {
   ].join("\n"));
 }
 
-// Only private addresses (the Docker network between Pelican servers, IPv4 or
-// IPv6 unique-local) may connect, and only as "orbit" to the "orbit" database.
-// Rewritten at each start so rule changes reach existing clusters.
 async function writeHba() {
   const { writeFile } = await import("node:fs/promises");
   await writeFile(join(DATA, "pg_hba.conf"), [
@@ -117,7 +101,6 @@ async function connect(user, password, database = "postgres") {
   throw new Error("postgres did not start");
 }
 
-// The application role owns only its database and has no other right.
 async function ensureAppDatabase() {
   const c = await connect("postgres", SUPER);
   try {
@@ -155,7 +138,6 @@ async function verifyEmail(username) {
   }
 }
 
-// Nightly logical backup (src/backup.js), 14 kept. Checked with `restore-check`.
 export async function backup() {
   const dir = await dump({ host: "127.0.0.1", port: PORT, user: "postgres", password: SUPER, database: "orbit" }, BACKUPS);
   prune(BACKUPS, 14);
@@ -165,10 +147,7 @@ export async function backup() {
 await hydrateSymlinks();
 const fresh = !existsSync(join(DATA, "PG_VERSION"));
 if (fresh) await initCluster();
-// A crash can leave this lock. Nothing else starts PostgreSQL in this container,
-// and PIDs are reused after a restart, so a lock found at startup is stale.
 rmSync(join(DATA, "postmaster.pid"), { force: true });
-// Older starts kept the socket (and its lock) in the data folder.
 for (const f of ["", ".lock"]) rmSync(join(DATA, `.s.PGSQL.${PORT}${f}`), { force: true });
 await writeHba();
 startPostgres();
@@ -190,7 +169,6 @@ const schedule = () => setTimeout(async () => {
 }, msToNight());
 schedule();
 
-// Pelican's "stop" (stdin) and signals: a clean, fast shutdown.
 const stop = () => server?.kill("SIGINT");
 process.on("SIGTERM", stop);
 process.on("SIGINT", stop);
@@ -198,9 +176,7 @@ process.stdin.on("data", d => {
   const cmd = String(d).trim();
   if (cmd == "stop") stop();
   if (cmd == "backup") backup().catch(e => console.error("backup failed", e));
-  // Without SMTP nobody receives the confirmation link: the panel's console can confirm an address.
   const verify = /^verify-email ([A-Za-z0-9_.-]{3,24})$/.exec(cmd);
   if (verify) verifyEmail(verify[1]).catch(e => console.error("verify-email failed:", e.message));
-  // Restores the newest dump into a scratch database and checks it (README: restore test).
   if (cmd == "restore-check") spawn(process.execPath, [join(ROOT, "scripts", "restore-check.mjs")], { stdio: "inherit", env: { ...process.env, SERVER_PORT: String(PORT) } });
 });

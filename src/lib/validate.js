@@ -1,6 +1,3 @@
-// Input rules shared by the routes. Everything users type is checked here,
-// on the server; the pages only repeat the same rules for comfort.
-
 export class ApiError extends Error {
   constructor(status, code, message, extra) {
     super(message ?? code);
@@ -14,7 +11,6 @@ export const bad = (code, message, extra) => new ApiError(400, code, message, ex
 
 export const USERNAME_RE = /^[A-Za-z0-9_.-]{3,24}$/;
 
-// Names a member cannot take: system words and anything posing as Orbit or its staff.
 const RESERVED = new Set(["admin", "administrator", "admins", "root", "system", "support", "help", "moderator", "mod", "mods",
   "staff", "team", "official", "security", "orbit", "orbitbrowser", "orbit-browser", "orbit_team", "orbitteam", "owner", "founder",
   "api", "www", "mail", "noreply", "no-reply", "null", "undefined", "anonymous", "deleted", "me", "settings", "login", "logout",
@@ -36,7 +32,6 @@ export function emailProblem(email) {
   return typeof email == "string" && email.length <= 254 && EMAIL_RE.test(email) ? null : "email_format";
 }
 
-// One account per mailbox: case-insensitive, and Gmail ignores dots and "+tags".
 export function normalizeEmail(email) {
   let [local, domain] = email.trim().toLowerCase().split("@");
   if (domain == "googlemail.com") domain = "gmail.com";
@@ -54,8 +49,6 @@ export function passwordProblem(password, { username, email } = {}) {
   return null;
 }
 
-// Plain text only: control characters removed, length capped. Pages render it
-// with textContent, so markup never runs; this keeps stored data clean too.
 export function cleanText(value, max) {
   if (value == null) return null;
   if (typeof value != "string") throw bad("text_type");
@@ -64,7 +57,6 @@ export function cleanText(value, max) {
   return s || null;
 }
 
-// http(s) only, no credentials, no local addresses.
 export function cleanUrl(value) {
   let u;
   try {
@@ -78,7 +70,6 @@ export function cleanUrl(value) {
   return u.href;
 }
 
-// A shareable site is a registrable host name, never a full URL.
 export function cleanDomain(value) {
   let host = String(value ?? "").trim().toLowerCase();
   try {
@@ -92,8 +83,6 @@ export function cleanDomain(value) {
   return host;
 }
 
-// Sites nobody should be able to advertise visiting: health, banking, dating,
-// adult content, religion, politics, job loss, legal trouble, local networks.
 const SENSITIVE_WORDS = ["health", "sante", "clinic", "hospital", "hopital", "doctolib", "therapy", "mental", "hiv", "cancer",
   "bank", "banque", "credit", "loan", "pret", "casino", "bet", "poker", "dating", "rencontre", "tinder", "grindr", "meetic",
   "porn", "xxx", "sex", "onlyfans", "escort", "church", "eglise", "mosque", "synagog", "party", "parti", "union", "syndicat",
