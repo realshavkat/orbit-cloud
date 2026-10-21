@@ -8,10 +8,11 @@ import * as badges from "./pages/badges.js";
 import * as support from "./pages/support.js";
 import * as admin from "./pages/admin.js";
 import * as legal from "./pages/legal.js";
+import { landing } from "./pages/landing.js";
 
 // [pattern, page, options]; :name captures one segment.
 const ROUTES = [
-  ["/", social.home],
+  ["/", landing, { full: true }],
   ["/login", auth.login, { bare: true }],
   ["/register", auth.register, { bare: true }],
   ["/verify", auth.verify, { bare: true }],
@@ -51,7 +52,10 @@ function match(path) {
 
 export function navigate(url, { replace = false } = {}) {
   if (replace) history.replaceState(null, "", url);
-  else history.pushState(null, "", url);
+  else {
+    history.pushState(null, "", url);
+    scrollTo({ top: 0, behavior: "instant" });
+  }
   render();
 }
 window.orbitNavigate = navigate;
@@ -126,7 +130,7 @@ function topbar(path) {
       h("a", { class: "btn small primary", href: "/register" }, t("Créer un compte", "Sign up")));
   }
   return h("header", { class: "top" },
-    h("a", { class: "brand", href: "/" }, h("span", { class: "dot" }), "Orbit"),
+    h("a", { class: "brand", href: "/" }, h("span", { class: "dot" }), h("span", {}, "Orbit")),
     h("nav", { class: "nav", "aria-label": t("Principal", "Main") },
       navLink("/discover", "compass", t("Découvrir", "Discover")),
       navLink("/badges", "award", t("Badges", "Badges")),
@@ -134,9 +138,16 @@ function topbar(path) {
     h("div", { class: "grow" }), form, right);
 }
 
-const footer = () => h("footer", {}, "Orbit · ",
-  h("a", { href: "/terms" }, t("Conditions", "Terms")), " · ", h("a", { href: "/privacy" }, t("Confidentialité", "Privacy")), " · ",
-  t("Le navigateur reste gratuit, avec ou sans compte.", "The browser stays free, with or without an account."));
+const footer = () => h("footer", {},
+  h("div", { class: "row" }, h("span", { class: "brand" }, h("span", { class: "dot" }), h("span", {}, "Orbit")),
+    h("span", {}, t("Le navigateur reste gratuit, avec ou sans compte.", "The browser stays free, with or without an account."))),
+  h("nav", { class: "row", "aria-label": t("Liens", "Links") },
+    h("a", { href: "/badges" }, t("Badges", "Badges")), h("a", { href: "/support" }, t("Soutenir", "Support")),
+    h("a", { href: "/terms" }, t("Conditions", "Terms")), h("a", { href: "/privacy" }, t("Confidentialité", "Privacy")),
+    h("a", { href: "https://github.com/realshavkat/orbit", target: "_blank", rel: "noopener" }, "GitHub")));
+
+// The floating bar firms up once the page scrolls.
+addEventListener("scroll", () => document.querySelector(".top")?.classList.toggle("scrolled", scrollY > 20), { passive: true });
 
 let renderSeq = 0;
 export async function render() {
@@ -148,7 +159,7 @@ export async function render() {
     await loadMe();
     state.config = await get("/config").catch(() => ({}));
   }
-  const main = h("main", { class: route?.opts.bare ? "narrow" : "" }, spinner());
+  const main = h("main", { class: route?.opts.bare ? "narrow" : route?.opts.full ? "full" : "" }, spinner());
   document.body.replaceChildren(topbar(path), main, footer());
   if (!route) {
     main.replaceChildren(errorBox({ code: "not_found" }));
