@@ -1,4 +1,5 @@
 import { readFileSync, existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
 export function loadDotEnv(file = new URL("../.env", import.meta.url)) {
   if (!existsSync(file)) return;
@@ -19,6 +20,7 @@ export function config(env = process.env) {
     databaseUrl: env.DATABASE_URL,
     cookieSecure: secure,
     mfaKey: env.MFA_ENCRYPTION_KEY || null,
+    downloadsDir: env.DOWNLOADS_DIR || fileURLToPath(new URL("../downloads/", import.meta.url)),
     trustProxy: env.TRUST_PROXY === "true",
     initialOwnerId: env.INITIAL_OWNER_ID || null,
     mail: {

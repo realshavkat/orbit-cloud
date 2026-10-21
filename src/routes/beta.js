@@ -13,7 +13,7 @@ export default async function betaRoutes(app) {
     const key = req.auth ? await userKey(db, req.auth.user.id) : null;
     return {
       ...s, currency: await getSetting(db, "donation_currency", "eur"), payments: !!app.stripe,
-      owned: !!(access && (access.paid || access.granted)), granted: !!access?.granted,
+      owned: !!(access && (access.paid || access.granted)), granted: !!access?.granted, staff: !!req.auth && (await req.auth.perms()).size > 0,
       key: key && { key: key.key, devices: key.devices, max_devices: key.max_devices, created_at: key.created_at },
     };
   });

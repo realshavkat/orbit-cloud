@@ -23,6 +23,7 @@ import adminRoutes from "./routes/admin.js";
 import modRoutes, { modAdminRoutes, createZenFetcher, createZenImageFetcher } from "./routes/mods.js";
 import betaRoutes, { licenseRoutes, betaAdminRoutes } from "./routes/beta.js";
 import forumRoutes from "./routes/forum.js";
+import downloadRoutes from "./routes/download.js";
 import { betaSettings, setKeySecret } from "./services/beta.js";
 
 export const SESSION_COOKIE = "orbit_session";
@@ -174,6 +175,7 @@ export async function buildApp({ cfg, pool, logger = true, mailer, stripe, mozil
     beta: await betaSettings(pool),
   }));
 
+  await app.register(downloadRoutes, { dir: cfg.downloadsDir });
   const web = fileURLToPath(new URL("../web/dist/", import.meta.url));
   await app.register(fastifyStatic, { root: `${web}assets`, prefix: "/assets/", index: false, maxAge: "7d" });
   app.setNotFoundHandler((req, reply) => {

@@ -7,8 +7,9 @@ import { createMailer } from "../src/services/mail.js";
 
 export const WEBHOOK_SECRET = "whsec_test_" + randomBytes(8).toString("hex");
 
-export async function setup({ withStripe = true, mozilla, zenFetch, zenImage = async () => null } = {}) {
+export async function setup({ withStripe = true, mozilla, zenFetch, zenImage = async () => null, downloadsDir } = {}) {
   const cfg = config({ ...process.env, APP_BASE_URL: "http://localhost:8790", MFA_ENCRYPTION_KEY: randomBytes(32).toString("hex") });
+  if (downloadsDir) cfg.downloadsDir = downloadsDir;
   cfg.stripe.webhookSecret = WEBHOOK_SECRET;
   const pool = createPool(process.env.DATABASE_URL);
   await migrate(pool);
