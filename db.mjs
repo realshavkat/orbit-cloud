@@ -8,7 +8,7 @@
 //   PG_SUPERUSER_PASSWORD  admin password, used only here
 //   PG_APP_PASSWORD        password of the "orbit" role the API uses
 //   SERVER_PORT            port given by Pelican (the allocation)
-import { existsSync, rmSync, readFileSync } from "node:fs";
+import { existsSync, rmSync } from "node:fs";
 import { readFile, symlink } from "node:fs/promises";
 import { join, dirname, relative } from "node:path";
 import { spawn } from "node:child_process";
@@ -152,17 +152,9 @@ export async function backup() {
 await hydrateSymlinks();
 const fresh = !existsSync(join(DATA, "PG_VERSION"));
 if (fresh) await initCluster();
-// A crash can leave this file; postgres refuses to start with a stale one.
-const pid = join(DATA, "postmaster.pid");
-if (existsSync(pid)) {
-  const other = Number(readFileSync(pid, "utf8").split("\n")[0]);
-  let alive = false;
-  try {
-    process.kill(other, 0);
-    alive = true;
-  } catch {}
-  if (!alive) rmSync(pid);
-}
+// A crash can leave this lock. Nothing else starts PostgreSQL in this container,
+// and PIDs are reused after a restart, so a lock found at startup is stale.
+rmSync(join(DATA, "postmaster.pid"), { force: true });
 await writeHba();
 startPostgres();
 await ensureAppDatabase();
