@@ -6,6 +6,7 @@ import { loadMe, session, setMe } from "../lib/session.js";
 import { fmtDate, fmtDateTime, fmtMoney, THEME } from "../lib/format.js";
 import { Icon, Link, Avatar, BadgeCard, Empty, Field, SwitchRow, ErrorBox } from "../components/ui.jsx";
 import { act, confirmDialog, openModal, toast, useBusy } from "../components/overlay.jsx";
+import { BetaKey } from "../components/BetaKey.jsx";
 
 const TABS = () => [
   ["", t("Profil", "Profile")], ["badges", "Badges"], ["sites", t("Sites et collections", "Sites and collections")], ["privacy", t("Confidentialité", "Privacy")],
@@ -516,9 +517,10 @@ function PaymentsTab({ data }) {
       <Group title={t("Accès à la bêta", "Beta access")}>
         <div className="list"><div className="switch-row">
           <span><b>{beta.owned ? t("Tu as accès à la bêta d'Orbit", "You have access to the Orbit beta") : beta.paywall ? t("Pas encore d'accès", "No access yet") : t("La bêta est gratuite en ce moment", "The beta is free right now")}</b>
-            <div className="hint">{beta.owned ? t("Connecte-toi à Firefox Sync dans Orbit pour l'utiliser.", "Sign in to Firefox Sync in Orbit to use it.") : t("Gratuit pour tous à la version 1.0.", "Free for everyone at version 1.0.")}</div></span>
+            <div className="hint">{beta.owned ? t("Entre ta clé dans Orbit quand il la demande, ou dans Paramètres › Bêta d'Orbit.", "Enter your key in Orbit when it asks, or in Settings › Orbit beta.") : t("Gratuit pour tous à la version 1.0.", "Free for everyone at version 1.0.")}</div></span>
           {beta.owned ? <span className="tag ok"><Icon name="check" />{t("Actif", "Active")}</span> : <Link className="btn small primary" to="/beta">{beta.paywall ? t(`Obtenir · ${fmtMoney(beta.price_cents, beta.currency)}`, `Get it · ${fmtMoney(beta.price_cents, beta.currency)}`) : t("Télécharger", "Download")}</Link>}
         </div></div>
+        {beta.key && <BetaKey value={beta.key.key} devices={beta.key.devices} max={beta.key.max_devices} />}
       </Group>
       {active && (
         <Group title={t("Soutien mensuel", "Monthly support")}>

@@ -22,7 +22,7 @@ import reportRoutes from "./routes/reports.js";
 import adminRoutes from "./routes/admin.js";
 import modRoutes, { modAdminRoutes, createZenFetcher, createZenImageFetcher } from "./routes/mods.js";
 import betaRoutes, { licenseRoutes, betaAdminRoutes } from "./routes/beta.js";
-import { betaSettings } from "./services/beta.js";
+import { betaSettings, setKeySecret } from "./services/beta.js";
 
 export const SESSION_COOKIE = "orbit_session";
 const SAFE = new Set(["GET", "HEAD", "OPTIONS"]);
@@ -39,6 +39,7 @@ export async function buildApp({ cfg, pool, logger = true, mailer, stripe, mozil
   app.decorate("mailer", mailer ?? createMailer(cfg, app.log));
   app.decorate("stripe", stripe === undefined ? createStripe(cfg) : stripe);
   app.decorate("mozilla", mozilla ?? createMozillaVerifier(cfg));
+  setKeySecret(cfg.mfaKey);
   app.decorate("zenFetch", zenFetch ?? createZenFetcher());
   app.decorate("zenImage", zenImage ?? createZenImageFetcher());
 
@@ -83,7 +84,7 @@ export async function buildApp({ cfg, pool, logger = true, mailer, stripe, mozil
     if (!SAFE.has(req.method) && !bearer && !req.url.startsWith("/api/v1/webhooks/")) {
       if (req.headers["x-orbit-request"] != "1") throw new ApiError(403, "csrf");
       const origin = req.headers.origin;
-      const noCookieAuth = req.url.split("?")[0] == "/api/v1/auth/mozilla";
+      const noCookieAuth = ["/api/v1/auth/mozilla", "/api/v1/license/activate"].includes(req.url.split("?")[0]);
       if (origin && origin != new URL(cfg.baseUrl).origin && !noCookieAuth) throw new ApiError(403, "csrf");
     }
     if (!token) return;

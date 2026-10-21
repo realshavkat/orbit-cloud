@@ -5,6 +5,7 @@ import { useMe } from "../lib/session.js";
 import { fmtMoney } from "../lib/format.js";
 import { Icon, Link, Liquid } from "../components/ui.jsx";
 import { useBusy } from "../components/overlay.jsx";
+import { BetaKey } from "../components/BetaKey.jsx";
 
 const DOWNLOAD = "https://github.com/realshavkat/orbit/releases/latest";
 
@@ -24,7 +25,7 @@ export default function Beta() {
   };
   const steps = [
     [t("Télécharge et installe Orbit", "Download and install Orbit"), t("Pour Windows 10 et 11, 64 bits.", "For Windows 10 and 11, 64-bit.")],
-    [t("Connecte-toi à Firefox Sync", "Sign in to Firefox Sync"), t("Au premier lancement, avec le même compte que ton compte Orbit.", "On first launch, with the same account as your Orbit account.")],
+    [t("Entre ta clé bêta", "Enter your beta key"), t("Au premier lancement. Elle est dans ton compte, et marche sur 3 appareils.", "On first launch. It's in your account and works on 3 devices.")],
     [t("C'est prêt", "You're in"), t("Orbit vérifie ton accès, puis fonctionne même hors ligne.", "Orbit checks your access, then works offline too.")],
   ];
   return (
@@ -47,6 +48,7 @@ export default function Beta() {
           {b.owned && <span className="tag ok" style={{ height: 32 }}><Icon name="check" />{b.granted ? t("Accès offert par l'équipe", "Access given by the team") : t("Accès acheté", "Access purchased")}</span>}
         </div>
         {b.paywall && !b.payments && !b.owned && <p className="faint small">{t("Le paiement ouvre bientôt.", "Payment opens soon.")}</p>}
+        {b.key && <div className="stack" style={{ gap: 8 }}><span className="muted small">{t("Ta clé bêta, à entrer dans Orbit :", "Your beta key, to enter in Orbit:")}</span><BetaKey value={b.key.key} devices={b.key.devices} max={b.key.max_devices} /></div>}
       </header>
       <section className="steps-3">
         {steps.map(([title, text], i) => (

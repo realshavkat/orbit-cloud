@@ -23,7 +23,7 @@ export function requirePermission(perms, key) {
   if (!perms.has(key)) throw new ApiError(403, "forbidden");
 }
 
-const NOTIFY_TYPES = ["friend_request", "friend_accepted", "badge", "support_badge", "contribution", "security", "report_update", "news", "moderation", "mod_review"];
+const NOTIFY_TYPES = ["friend_request", "friend_accepted", "badge", "support_badge", "contribution", "security", "report_update", "news", "moderation", "mod_review", "beta_key"];
 
 export async function notify(db, userId, type, data = {}) {
   if (!NOTIFY_TYPES.includes(type)) throw new Error(`unknown notification type ${type}`);

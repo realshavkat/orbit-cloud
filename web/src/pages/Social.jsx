@@ -132,6 +132,7 @@ const NOTIF = {
   mod_review: n => ["palette", n.data.removed ? t(`Ton mod ${n.data.name} a été retiré : ${n.data.note}`, `Your mod ${n.data.name} was removed: ${n.data.note}`)
     : n.data.approved ? t(`Ton mod ${n.data.name} ${n.data.version} est publié.`, `Your mod ${n.data.name} ${n.data.version} is listed.`)
       : t(`Ton mod ${n.data.name} ${n.data.version} a été refusé : ${n.data.note}`, `Your mod ${n.data.name} ${n.data.version} was rejected: ${n.data.note}`), `/mods/${n.data.mod}`],
+  beta_key: () => ["download", t("Ta clé bêta d'Orbit est prête. Entre-la dans l'application.", "Your Orbit beta key is ready. Enter it in the app."), "/me/payments"],
   news: n => ["info", n.data.title ?? t("Actualité d'Orbit", "Orbit news"), null],
 };
 

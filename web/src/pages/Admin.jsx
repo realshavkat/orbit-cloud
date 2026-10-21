@@ -231,7 +231,7 @@ SECTIONS["users/:id"] = {
             {u.social_suspended_until && new Date(u.social_suspended_until) > new Date() && <span className="tag warn">{t("social suspendu jusqu'au", "social suspended until")} {fmtDate(u.social_suspended_until)}</span>}
             <span className="tag">{d.sessions} session(s)</span>
             <span className={`tag ${u.email_verified_at ? "ok" : "warn"}`}>{u.email_verified_at ? t("e-mail vérifié", "verified e-mail") : t("e-mail non vérifié", "unverified e-mail")}</span>
-            {d.beta && <span className={`tag ${d.beta.paid || d.beta.granted ? "ok" : ""}`}>{d.beta.paid ? t("bêta achetée", "beta purchased") : d.beta.granted ? t("bêta offerte", "beta given") : t("pas de bêta", "no beta")}</span>}
+            {d.beta && <span className={`tag ${d.beta.paid || d.beta.granted ? "ok" : ""}`}>{d.beta.paid ? t("bêta achetée", "beta purchased") : d.beta.granted ? t("bêta offerte", "beta given") : t("pas de bêta", "no beta")}{d.beta.key && ` · ${t("clé", "key")} …${d.beta.key.last4} · ${d.beta.key.devices}/${d.beta.key.max_devices}`}</span>}
           </div>
           <div className="row wrap">
             {perms.has("users.suspend") && (u.status == "suspended"
@@ -668,7 +668,7 @@ SECTIONS.payments = {
 };
 
 SECTIONS.beta = {
-  load: () => get("/admin/beta"),
+  load: () => Promise.all([get("/admin/beta"), get("/admin/beta/keys")]).then(([s, k]) => ({ ...s, list: k.keys })),
   View({ data, perms }) {
     const reload = useReload();
     const [paywall, setPaywall] = useState(data.paywall);
@@ -681,6 +681,7 @@ SECTIONS.beta = {
         <section className="kpis">
           <Stat label={t("Accès achetés", "Purchased")} value={data.paid} />
           <Stat label={t("Accès offerts", "Given by hand")} value={data.granted} />
+          <Stat label={t("Appareils activés", "Activated devices")} value={data.devices} sub={`${data.keys} ${t("clés actives", "active keys")}`} />
           <Stat label={t("Prix", "Price")} value={fmtMoney(data.price_cents)} sub={data.paywall ? t("bêta payante", "paid beta") : t("gratuit pour tous", "free for everyone")} />
         </section>
         <form className="panel stack" onSubmit={async e => {
@@ -693,12 +694,72 @@ SECTIONS.beta = {
           </div>
           <Field label={t("Prix (€)", "Price (€)")}><input className="input" type="number" min={1} max={100} step="0.5" style={{ maxWidth: 160 }} value={price} disabled={!canEdit} onChange={e => setPrice(e.target.value)} /></Field>
           {canEdit && <button className="btn primary" type="submit" style={{ width: "fit-content" }} disabled={busy}>{t("Enregistrer", "Save")}</button>}
-          <p className="hint">{t("Pour offrir l'accès à un membre : Membres › son compte › Offrir la bêta.", "To give access to a member: Users › their account › Give beta.")}</p>
+          <p className="hint">{t("Pour offrir l'accès à un membre : Membres › son compte › Offrir la bêta. Il reçoit une clé dans son compte.", "To give access to a member: Users › their account › Give beta. They get a key in their account.")}</p>
         </form>
+        <section className="stack">
+          <div className="row between"><h2>{t("Clés", "Keys")} <span className="faint">· {data.keys}</span></h2>
+            {perms.has("beta.grant") && <button className="btn" onClick={() => openModal(close => <MakeKeys close={close} onDone={reload} />)}><Icon name="plus" />{t("Créer des clés", "Create keys")}</button>}</div>
+          {data.list.length ? (
+            <Table cols={[t("Clé", "Key"), t("Pour", "For"), t("Appareils", "Devices"), t("Créée", "Created"), t("État", "State"), ""]}>
+              {data.list.map(k => (
+                <tr key={k.id}>
+                  <td className="mono">{k.key ?? `…${k.last4}`}</td>
+                  <td>{k.username ? <Link className="link" to={`/admin/users/${k.user_id}`}>{k.username}</Link> : <span className="muted">{k.note || t("à distribuer", "to hand out")}</span>}<div className="faint small">{{ payment: t("achat", "purchase"), grant: t("offerte", "given"), manual: t("créée à la main", "made by hand") }[k.source]}</div></td>
+                  <td className="muted">{k.devices} / {k.max_devices}</td>
+                  <td className="muted">{fmtDate(k.created_at)}</td>
+                  <td>{k.revoked_at ? <span className="dot" style={{ "--c": "var(--danger)" }}>{t("révoquée", "revoked")}</span> : <span className="dot" style={{ "--c": "var(--ok)" }}>{t("active", "active")}</span>}</td>
+                  <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>{!k.revoked_at && <>
+                    {k.devices > 0 && <button className="btn small quiet" onClick={async () => (await act(() => post(`/admin/beta/keys/${k.id}/reset-devices`), { ok: t("Appareils réinitialisés", "Devices reset") })) && reload()}>{t("Réinitialiser", "Reset devices")}</button>}
+                    <button className="btn small quiet danger" onClick={reasoned(t("Révoquer la clé", "Revoke the key"), r => post(`/admin/beta/keys/${k.id}/revoke`, { reason: r }), reload)}>{t("Révoquer", "Revoke")}</button>
+                  </>}</td>
+                </tr>
+              ))}
+            </Table>
+          ) : <Empty icon="key-round">{t("Aucune clé pour l'instant.", "No key yet.")}</Empty>}
+        </section>
       </>
     );
   },
 };
+
+function MakeKeys({ close, onDone }) {
+  const [count, setCount] = useState(1);
+  const [note, setNote] = useState("");
+  const [devices, setDevices] = useState(3);
+  const [made, setMade] = useState(null);
+  const [busy, run] = useBusy();
+  if (made) {
+    return (
+      <>
+        <h2>{t("Clés créées", "Keys created")}</h2>
+        <p>{t("Donne-les à qui tu veux. Elles restent visibles ici tant qu'elles ne sont pas révoquées.", "Hand them out as you like. They stay visible here until revoked.")}</p>
+        <pre className="code">{made.join("\n")}</pre>
+        <div className="row" style={{ justifyContent: "flex-end" }}>
+          <button className="btn" onClick={() => navigator.clipboard?.writeText(made.join("\n"))}><Icon name="copy" />{t("Tout copier", "Copy all")}</button>
+          <button className="btn primary" onClick={() => (close(), onDone())}>{t("Terminé", "Done")}</button>
+        </div>
+      </>
+    );
+  }
+  return (
+    <>
+      <h2>{t("Créer des clés bêta", "Create beta keys")}</h2>
+      <p>{t("Pour des testeurs sans compte, un concours, un partenaire…", "For testers without an account, a giveaway, a partner…")}</p>
+      <div className="row" style={{ gap: 12 }}>
+        <div style={{ flex: 1 }}><Field label={t("Nombre", "How many")}><input className="input" type="number" min={1} max={50} value={count} onChange={e => setCount(e.target.value)} /></Field></div>
+        <div style={{ flex: 1 }}><Field label={t("Appareils par clé", "Devices per key")}><input className="input" type="number" min={1} max={20} value={devices} onChange={e => setDevices(e.target.value)} /></Field></div>
+      </div>
+      <Field label={t("Note (facultatif)", "Note (optional)")}><input className="input" maxLength={200} placeholder={t("ex. Testeurs Discord", "e.g. Discord testers")} value={note} onChange={e => setNote(e.target.value)} /></Field>
+      <div className="row" style={{ justifyContent: "flex-end" }}>
+        <button className="btn" onClick={() => close()}>{t("Annuler", "Cancel")}</button>
+        <button className="btn primary" disabled={busy} onClick={async () => {
+          const r = await run(() => post("/admin/beta/keys", { count: Number(count) || 1, note: note || undefined, max_devices: Number(devices) || 3 }));
+          if (r) setMade(r.keys);
+        }}>{t("Créer", "Create")}</button>
+      </div>
+    </>
+  );
+}
 
 SECTIONS.audit = {
   load: ({ query }) => get(`/admin/audit${query.action ? `?action=${encodeURIComponent(query.action)}` : ""}`),

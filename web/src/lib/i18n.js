@@ -49,7 +49,7 @@ const ERRORS = {
     version_exists: "Cette version existe déjà : change le numéro.", version_invalid: "Numéro de version invalide.", name_invalid: "Nom invalide.",
     note_required: "Une note est obligatoire pour refuser.", images_required: "Ajoute au moins une capture du mod.", too_many_images: "6 images au maximum.",
     not_pending: "Cette version a déjà été traitée.", mod_removed: "Ce mod a été retiré par l'équipe.", text_long: "Texte trop long.",
-    beta_owned: "Tu as déjà accès à la bêta.", beta_free: "La bêta est gratuite en ce moment.",
+    beta_owned: "Tu as déjà accès à la bêta.", beta_free: "La bêta est gratuite en ce moment.", reason_required: "Indique un motif.",
   },
   en: {
     invalid_credentials: "Wrong login or password.", invalid_credentials_or_code: "Wrong password or code.",
@@ -81,7 +81,7 @@ const ERRORS = {
     version_exists: "This version already exists: change the number.", version_invalid: "Invalid version number.", name_invalid: "Invalid name.",
     note_required: "A note is required to reject.", images_required: "Add at least one screenshot of the mod.", too_many_images: "6 pictures at most.",
     not_pending: "This version was already handled.", mod_removed: "This mod was removed by the team.", text_long: "Text too long.",
-    beta_owned: "You already have beta access.", beta_free: "The beta is free right now.",
+    beta_owned: "You already have beta access.", beta_free: "The beta is free right now.", reason_required: "Add a reason.",
   },
 };
 

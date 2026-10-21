@@ -1,7 +1,7 @@
 import Stripe from "stripe";
 import { tx } from "../db.js";
 import { syncSupporterBadges } from "./badges.js";
-import { syncBetaBadge } from "./beta.js";
+import { syncBeta } from "./beta.js";
 
 export const MIN_CENTS = 100;
 export const MAX_CENTS = 100_000;
@@ -180,7 +180,7 @@ export async function processEvent(pool, eventId) {
     }
     for (const u of users) {
       await syncSupporterBadges(db, u);
-      await syncBetaBadge(db, u);
+      await syncBeta(db, u);
     }
     await db.query("UPDATE payment_webhook_events SET status = $2, processed_at = now(), attempts = attempts + 1, error = NULL WHERE id = $1",
       [eventId, handled ? "processed" : "ignored"]);

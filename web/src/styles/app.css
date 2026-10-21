@@ -455,3 +455,5 @@ main[aria-busy="true"] { opacity: .7; transition: opacity .2s .15s; }
 .profile-banner .liquid { mask-image: none; -webkit-mask-image: none; }
 .amounts button { align-items: center; }
 .beta-hero .faint { font-size: 14px; }
+.beta-key { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding: 12px 0; }
+.beta-key code { padding: 10px 14px; border-radius: 9px; background: var(--s1); box-shadow: inset 0 0 0 1px var(--line-2); font: 500 15px var(--mono); letter-spacing: .06em; user-select: all; }

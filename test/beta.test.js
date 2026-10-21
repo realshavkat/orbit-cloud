@@ -58,3 +58,41 @@ test("staff grant beta by hand; the free period opens it to everyone", async () 
   assert.equal((await plain.post("/api/v1/beta/checkout")).body.error, "beta_free");
   await setPaywall(true);
 });
+
+test("keys: given with the beta, typed in the app, limited to a few devices, dead once revoked", async () => {
+  await setPaywall(true);
+  const admin = await member(ctx);
+  await grantRole(ctx.pool, admin.id, "administrator");
+  const u = await member(ctx);
+  assert.equal((await u.get("/api/v1/beta")).body.key, null);
+  await admin.post(`/api/v1/admin/beta/users/${u.id}`, { action: "grant", reason: "tester" });
+  const { key } = (await u.get("/api/v1/beta")).body.key;
+  assert.match(key, /^ORBIT(-[A-Z0-9]{5}){4}$/);
+  assert.ok(JSON.stringify((await u.get("/api/v1/notifications")).body).includes("beta_key"));
+
+  const app = client(ctx.app);
+  const act = (k, device) => app.post("/api/v1/license/activate", { key: k, device });
+  assert.equal((await act(key.toLowerCase().replace(/-/g, " "), "d1")).body.active, true, "typing is forgiving");
+  for (const d of ["d1", "d2", "d3"]) assert.equal((await act(key, d)).status, 200);
+  const fourth = await act(key, "d4");
+  assert.equal(fourth.status, 403);
+  assert.equal(fourth.body.error, "key_device_limit");
+  assert.equal((await act("ORBIT-AAAAA-BBBBB-CCCCC-DDDDD", "d1")).body.error, "key_invalid");
+
+  await admin.post(`/api/v1/admin/beta/users/${u.id}`, { action: "revoke", reason: "done" });
+  assert.equal((await act(key, "d1")).body.error, "key_revoked");
+
+  const made = await admin.post("/api/v1/admin/beta/keys", { count: 2, note: "friends" });
+  assert.equal(made.body.keys.length, 2);
+  assert.equal((await act(made.body.keys[0], "x")).body.active, true);
+  const list = (await admin.get("/api/v1/admin/beta/keys")).body.keys;
+  const row = list.find(k => k.key == made.body.keys[0]);
+  assert.equal(row.devices, 1);
+  assert.equal((await admin.post(`/api/v1/admin/beta/keys/${row.id}/revoke`, { reason: "leaked" })).status, 200);
+  assert.equal((await act(made.body.keys[0], "x")).body.error, "key_revoked");
+  assert.equal((await u.post("/api/v1/admin/beta/keys", { count: 1 })).status, 403);
+
+  await setPaywall(false);
+  assert.equal((await act("nonsense", "z")).body.active, true, "free period: anything goes");
+  await setPaywall(true);
+});
