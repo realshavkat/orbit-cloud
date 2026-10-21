@@ -193,4 +193,6 @@ process.stdin.on("data", d => {
   const cmd = String(d).trim();
   if (cmd == "stop") stop();
   if (cmd == "backup") backup().catch(e => console.error("backup failed", e));
+  // Restores the newest dump into a scratch database and checks it (README: restore test).
+  if (cmd == "restore-check") spawn(process.execPath, [join(ROOT, "scripts", "restore-check.mjs")], { stdio: "inherit", env: { ...process.env, SERVER_PORT: String(PORT) } });
 });
