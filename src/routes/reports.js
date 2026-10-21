@@ -7,14 +7,14 @@ export default async function reportRoutes(app) {
 
   app.post("/", { config: { rateLimit: { max: 10, timeWindow: "1 hour" } },
     schema: { body: { type: "object", required: ["target_type", "target_id", "reason"], properties: {
-      target_type: { enum: ["user", "collection"] }, target_id: UUID,
+      target_type: { enum: ["user", "collection", "thread", "post"] }, target_id: UUID,
       reason: { enum: ["spam", "harassment", "impersonation", "inappropriate", "illegal", "other"] }, details: { type: ["string", "null"] } } } } },
   async (req, reply) => {
     const me = app.user(req, { verified: true });
     const { target_type: type, target_id: id } = req.body;
-    const exists = type == "user"
-      ? (await db.query("SELECT 1 FROM users WHERE id = $1 AND status <> 'deleted'", [id])).rows.length
-      : (await db.query("SELECT 1 FROM site_collections WHERE id = $1", [id])).rows.length;
+    const sql = { user: "SELECT 1 FROM users WHERE id = $1 AND status <> 'deleted'", collection: "SELECT 1 FROM site_collections WHERE id = $1",
+      thread: "SELECT 1 FROM forum_threads WHERE id = $1 AND NOT deleted", post: "SELECT 1 FROM forum_posts WHERE id = $1 AND NOT deleted" }[type];
+    const exists = (await db.query(sql, [id])).rows.length;
     if (!exists) throw new ApiError(404, "not_found");
     if (type == "user" && id == me.id) throw new ApiError(400, "self_report");
     const { rows: open } = await db.query(

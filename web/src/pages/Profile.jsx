@@ -4,7 +4,7 @@ import { t, errorText } from "../lib/i18n.js";
 import { get, post, patch, del } from "../lib/api.js";
 import { useMe } from "../lib/session.js";
 import { fmtDate, ago, THEME, localBadge } from "../lib/format.js";
-import { Icon, Link, Liquid, Avatar, BadgeCard, Empty } from "../components/ui.jsx";
+import { Icon, Link, Avatar, BadgeCard, Empty } from "../components/ui.jsx";
 import { act, confirmDialog, openModal } from "../components/overlay.jsx";
 import { useClickAway } from "../components/Shell.jsx";
 
@@ -175,9 +175,7 @@ export default function Profile() {
   const sideKeys = order.filter(k => side.includes(k) && p[k]?.length);
   return (
     <div>
-      <div className="profile-banner" style={p.banner_url ? { backgroundImage: `url("${p.banner_url}")` } : undefined}>
-        {!p.banner_url && <Liquid a={color} />}
-      </div>
+      <div className="profile-banner" style={p.banner_url ? { backgroundImage: `url("${p.banner_url}")` } : { "--c": color }} />
       <section className="profile-head" aria-label={t("Profil", "Profile")}>
         <Avatar user={p} className="avatar lg" />
         <div className="names">

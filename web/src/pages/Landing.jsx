@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { t } from "../lib/i18n.js";
+import { get } from "../lib/api.js";
 import { useMe, session } from "../lib/session.js";
 import { fmtMoney } from "../lib/format.js";
-import { Icon, Link, Liquid } from "../components/ui.jsx";
+import { Icon, Link } from "../components/ui.jsx";
 import { SLOGAN } from "../components/Shell.jsx";
+import { LatestThreads, STATUS } from "./Forum.jsx";
 
 const STEPS = () => [
   ["spaces", "layers", t("Espaces", "Spaces"), t("Un espace pour chaque partie de ta vie", "A space for each part of your life"),
@@ -47,11 +49,11 @@ const MORE = () => [
   ["sparkles", t("Pipette, loupe, PDF", "Picker, loupe, PDF"), t("Les petits outils du quotidien, déjà là.", "The everyday little tools, already there.")],
 ];
 
-function Mock({ active, tilt, mockRef }) {
+function Mock({ active }) {
   const rows = [["languages", t("Traduire la page", "Translate page")], ["layers", t("Fermer les onglets en double", "Close duplicate tabs")], ["pipette", t("Pipette à couleurs", "Color picker")], ["lock", t("Verrouiller Orbit", "Lock Orbit")]];
   const dl = [["film", "trailer-4k.mp4", 8], ["download", "orbit-setup.exe", 4], ["image", "photos.zip", 6]];
   return (
-    <div ref={mockRef} className={`mock${tilt ? " tilt" : ""}`} data-active={active}>
+    <div className="mock" data-active={active}>
       <div className="m-top"><div className="m-dots"><i /><i /><i /></div><div className="m-url"><Icon name="lock" /><span>orbit://{active}</span></div></div>
       <div className="m-body">
         <div className="m-side">
@@ -92,15 +94,8 @@ function Mock({ active, tilt, mockRef }) {
   );
 }
 
-function useReveal(root) {
+function useCounts(root) {
   useEffect(() => {
-    const io = new IntersectionObserver(entries => {
-      for (const e of entries) if (e.isIntersecting) {
-        e.target.classList.add("in");
-        io.unobserve(e.target);
-      }
-    }, { threshold: 0.15 });
-    root.current.querySelectorAll("[data-reveal]").forEach(el => io.observe(el));
     const counts = new IntersectionObserver(entries => {
       for (const e of entries) {
         if (!e.isIntersecting) continue;
@@ -116,98 +111,112 @@ function useReveal(root) {
       }
     }, { threshold: 0.6 });
     root.current.querySelectorAll("[data-count]").forEach(el => counts.observe(el));
+    return () => counts.disconnect();
+  }, []);
+}
+
+function useScrollTilt(ref) {
+  useEffect(() => {
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches) return ref.current?.style.setProperty("--p", 1);
+    let raf = 0;
+    const on = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        const el = ref.current;
+        if (!el) return;
+        const r = el.getBoundingClientRect();
+        const p = Math.max(0, Math.min(1, 1 - (r.top - innerHeight * 0.25) / (innerHeight * 0.55)));
+        el.style.setProperty("--p", p.toFixed(3));
+      });
+    };
+    on();
+    addEventListener("scroll", on, { passive: true });
+    addEventListener("resize", on);
     return () => {
-      io.disconnect();
-      counts.disconnect();
+      cancelAnimationFrame(raf);
+      removeEventListener("scroll", on);
+      removeEventListener("resize", on);
     };
   }, []);
+}
+
+const Words = ({ text }) => text.split(" ").map((w, i) => <span key={i} className="hw" style={{ "--w": i }}>{w}{" "}</span>);
+
+function ForumPreview() {
+  const [data, setData] = useState(null);
+  useEffect(() => {
+    Promise.all([get("/forum/threads?sort=hot"), get("/forum/suggestions/summary")])
+      .then(([th, s]) => setData({ threads: th.threads.slice(0, 4), summary: s }))
+      .catch(() => setData({ threads: [], summary: {} }));
+  }, []);
+  const S = STATUS();
+  return (
+    <section className="l-forum">
+      <div className="l-forum-text" data-reveal="">
+        <span className="eyebrow">Forum</span>
+        <h2>{t("La communauté décide de la suite.", "The community shapes what comes next.")}</h2>
+        <p>{t("Des discussions par sujet, des votes, et un tableau de suggestions où l'équipe répond. Orbit l'ouvre au démarrage, et un réglage suffit pour l'enlever.",
+          "Threads by topic, votes, and a suggestions board where the team answers. Orbit opens it at launch, and one setting turns that off.")}</p>
+        <ul className="l-status">
+          {Object.entries(S).slice(1, 4).map(([k, [ic, label, c]]) => (
+            <li key={k} style={{ "--c": c }}><Icon name={ic} /><span>{label}</span><b>{data ? data.summary[k] ?? 0 : "–"}</b></li>
+          ))}
+        </ul>
+        <div className="row wrap">
+          <Link className="btn primary big" to="/forum">{t("Ouvrir le forum", "Open the forum")}<Icon name="arrow-right" /></Link>
+          <Link className="btn big quiet" to="/forum/suggestions"><Icon name="lightbulb" />Suggestions</Link>
+        </div>
+      </div>
+      <div className="l-window" data-reveal="" style={{ "--d": "120ms" }}>
+        <div className="l-window-bar"><i /><i /><i /><span>orbit://forum</span></div>
+        <div className="l-window-body">
+          {!data ? Array.from({ length: 4 }, (_, i) => <div key={i} className="l-skel"><span className="skeleton" /><span className="skeleton" /><span className="skeleton" /></div>)
+            : data.threads.length ? <LatestThreads threads={data.threads} />
+              : <div className="empty"><Icon name="message-square" /><div>{t("Le forum vient d'ouvrir. Lance la première discussion.", "The forum just opened. Start the first thread.")}</div>
+                <Link className="btn small" to="/forum/new">{t("Nouvelle discussion", "New thread")}</Link></div>}
+        </div>
+      </div>
+    </section>
+  );
 }
 
 export default function Landing() {
   const me = useMe();
   const root = useRef(null);
+  const shot = useRef(null);
   const steps = STEPS();
   const [scene, setScene] = useState(steps[0][0]);
   const [hero, setHero] = useState(0);
-  const tiltRef = useRef(null);
   const stepRefs = useRef([]);
-  useReveal(root);
+  useCounts(root);
+  useScrollTilt(shot);
   useEffect(() => {
     const io = new IntersectionObserver(entries => {
       for (const e of entries) if (e.isIntersecting) setScene(e.target.dataset.step);
     }, { rootMargin: "-45% 0px -45% 0px" });
     stepRefs.current.forEach(s => s && io.observe(s));
-    const id = setInterval(() => setHero(k => (k + 1) % steps.length), 3200);
+    const id = setInterval(() => setHero(k => (k + 1) % steps.length), 3400);
     return () => {
       io.disconnect();
       clearInterval(id);
     };
   }, []);
   const price = session.config?.beta?.paywall ? fmtMoney(session.config.beta.price_cents ?? 200) : null;
-  const join = me ? <Link className="btn big" to={`/u/${me.username}`}>{t("Mon profil", "My profile")}</Link>
-    : <Link className="btn big" to="/register">{t("Rejoindre la communauté", "Join the community")}</Link>;
-  const get = price
-    ? <Link className="btn accent big" to="/beta"><Icon name="download" />{t(`Obtenir la bêta · ${price}`, `Get the beta · ${price}`)}</Link>
-    : <Link className="btn accent big" to="/beta"><Icon name="download" />{t("Télécharger pour Windows", "Download for Windows")}</Link>;
+  const get_ = price
+    ? <Link className="btn primary big" to="/beta"><Icon name="download" />{t(`Obtenir la bêta · ${price}`, `Get the beta · ${price}`)}</Link>
+    : <Link className="btn primary big" to="/beta"><Icon name="download" />{t("Télécharger pour Windows", "Download for Windows")}</Link>;
   return (
     <div className="landing" ref={root}>
-      <section className="hero" onPointerMove={e => {
-        tiltRef.current?.style.setProperty("--rx", `${(-(e.clientY / innerHeight - 0.5) * 8).toFixed(2)}deg`);
-        tiltRef.current?.style.setProperty("--ry", `${((e.clientX / innerWidth - 0.5) * 10).toFixed(2)}deg`);
-      }}>
-        <Liquid className="liquid hero-liquid" />
-        <div className="hero-text">
-          <span className="kicker-line" data-reveal="">{price ? t("Navigateur pour Windows · bêta", "Browser for Windows · beta") : t("Navigateur pour Windows · version 158", "Browser for Windows · version 158")}</span>
-          <h1 data-reveal="" style={{ "--d": "80ms" }}>{SLOGAN()}</h1>
-          <p className="lead" data-reveal="" style={{ "--d": "160ms" }}>
-            {t("Espaces, palette de commandes, vue partagée, verrouillage. Ton historique reste sur ton ordinateur. Basé sur Firefox.",
-              "Spaces, command palette, split view, lock. Your history stays on your computer. Built on Firefox.")}
-            {price && " "}{price && t(`Bêta à ${price}, une seule fois ; gratuit pour tous à la version 1.0.`, `Beta for ${price}, once; free for everyone at version 1.0.`)}
-          </p>
-          <div className="hero-cta" data-reveal="" style={{ "--d": "240ms" }}>{get}{join}</div>
-        </div>
-        <div className="hero-mock" data-reveal="" style={{ "--d": "200ms" }}><Mock active={steps[hero][0]} tilt mockRef={tiltRef} /></div>
-      </section>
-
-      <div className="marquee" aria-hidden="true"><div className="marquee-track">
-        {[...MORE(), ...MORE()].map(([ic, name], i) => <span key={i}><Icon name={ic} />{name}</span>)}
-      </div></div>
-
-      <section className="story" id="features">
-        <header className="section-head" data-reveal="">
-          <span className="eyebrow">{t("Fonctionnalités", "Features")}</span>
-          <h2>{t("Fait pour aller vite.", "Built for speed.")}</h2>
-          <p>{t("Fais défiler : chaque fonction s'allume dans la fenêtre à droite.", "Scroll: each feature lights up in the window on the right.")}</p>
-        </header>
-        <div className="story-grid">
-          <div className="steps">
-            {steps.map(([id, ic, kicker, title, text], i) => (
-              <article key={id} ref={el => (stepRefs.current[i] = el)} className={`step${scene == id ? " on" : ""}`} data-step={id}>
-                <span className="kicker"><Icon name={ic} /><span>{String(i + 1).padStart(2, "0")} · {kicker}</span></span>
-                <h3>{title}</h3><p>{text}</p>
-              </article>
-            ))}
-          </div>
-          <div className="stage">
-            <Mock active={scene} />
-            <div className="rail">{steps.map(([id], i) => <i key={id} className={scene == id ? "on" : ""} onClick={() => stepRefs.current[i]?.scrollIntoView({ block: "center", behavior: "smooth" })} />)}</div>
-          </div>
-        </div>
-      </section>
-
-      <section className="more">
-        <header className="section-head" data-reveal="">
-          <h2>{t("Et tous les détails qui comptent.", "And every detail that matters.")}</h2>
-          <p>{t("Chaque réglage s'explique, et chaque action a son raccourci.", "Every setting explains itself, and every action has a shortcut.")}</p>
-        </header>
-        <div className="more-grid">
-          {MORE().map(([ic, name, text, to], i) => {
-            const body = <><Icon name={ic} /><h3>{name}</h3><p>{text}</p></>;
-            return to
-              ? <Link key={i} className="detail" to={to} data-reveal="" style={{ "--d": `${(i % 4) * 60}ms` }}>{body}</Link>
-              : <div key={i} className="detail" data-reveal="" style={{ "--d": `${(i % 4) * 60}ms` }}>{body}</div>;
-          })}
-        </div>
+      <section className="hero">
+        <Link className="release" to="/forum"><span>{t("Nouveau", "New")}</span>{t("Le forum Orbit est ouvert", "The Orbit forum is open")}<Icon name="arrow-right" /></Link>
+        <h1 className="hero-title"><Words text={SLOGAN()} /></h1>
+        <p className="lead">
+          {t("Espaces, palette de commandes, vue partagée, verrouillage, mods vérifiés. Ton historique reste sur ton ordinateur. Basé sur Firefox.",
+            "Spaces, command palette, split view, lock, reviewed mods. Your history stays on your computer. Built on Firefox.")}
+        </p>
+        <div className="hero-cta">{get_}<Link className="btn big" to="/forum"><Icon name="message-square" />{t("Voir le forum", "Visit the forum")}</Link></div>
+        <p className="hero-meta">{price ? t(`Bêta à ${price}, une seule fois · gratuit à la 1.0`, `Beta ${price} once · free at 1.0`) : t("Gratuit", "Free")}<i />Windows 10 · 11<i />Firefox 158</p>
+        <div className="hero-shot" ref={shot}><Mock active={steps[hero][0]} /></div>
       </section>
 
       <section className="numbers">
@@ -216,30 +225,70 @@ export default function Landing() {
           .map(([n, label], i) => <div key={i} className="num" data-reveal="" style={{ "--d": `${i * 90}ms` }}><b data-count={n}>0</b><span>{label}</span></div>)}
       </section>
 
+      <section className="story" id="features">
+        <header className="section-head" data-reveal="">
+          <span className="eyebrow">{t("Fonctionnalités", "Features")}</span>
+          <h2>{t("Pensé pour aller vite, sans bruit.", "Built for speed, without the noise.")}</h2>
+          <p>{t("Chaque fonction s'allume dans la fenêtre pendant que tu fais défiler.", "Each feature lights up in the window as you scroll.")}</p>
+        </header>
+        <div className="story-grid">
+          <div className="steps">
+            {steps.map(([id, ic, kicker, title, text], i) => (
+              <article key={id} ref={el => (stepRefs.current[i] = el)} className={`step${scene == id ? " on" : ""}`} data-step={id}>
+                <span className="kicker"><b>{String(i + 1).padStart(2, "0")}</b><Icon name={ic} />{kicker}</span>
+                <h3>{title}</h3><p>{text}</p>
+              </article>
+            ))}
+          </div>
+          <div className="stage">
+            <Mock active={scene} />
+            <div className="rail">{steps.map(([id], i) => <button key={id} type="button" aria-label={steps[i][2]} className={scene == id ? "on" : ""} onClick={() => stepRefs.current[i]?.scrollIntoView({ block: "center", behavior: "smooth" })} />)}</div>
+          </div>
+        </div>
+      </section>
+
+      <section className="more">
+        <header className="section-head left" data-reveal="">
+          <span className="eyebrow">{t("Détails", "Details")}</span>
+          <h2>{t("Et tous les détails qui comptent.", "And every detail that matters.")}</h2>
+        </header>
+        <div className="more-grid">
+          {MORE().map(([ic, name, text, to], i) => {
+            const body = <><span className="d-ic"><Icon name={ic} /></span><span><h3>{name}</h3><p>{text}</p></span></>;
+            return to
+              ? <Link key={i} className="detail" to={to} data-reveal="" style={{ "--d": `${(i % 3) * 70}ms` }}>{body}</Link>
+              : <div key={i} className="detail" data-reveal="" style={{ "--d": `${(i % 3) * 70}ms` }}>{body}</div>;
+          })}
+        </div>
+      </section>
+
+      <ForumPreview />
+
       <section className="community">
-        <div className="community-text" data-reveal="">
-          <span className="eyebrow">{t("Communauté", "Community")}</span>
+        <div className="badge-orbit" data-reveal="">
+          {[["rocket", "#f5c518"], ["shield-check", "#ff8d97"], ["heart", "#ff8da5"], ["bug", "#3dd68c"], ["flask-conical", "#f5b841"], ["code", "#7fd1ff"], ["gem", "#c9ccd8"], ["sparkles", "#c4b5ff"]]
+            .map(([ic, c], i) => <span key={ic} className="orb" style={{ "--c": c, "--i": i }}><Icon name={ic} /></span>)}
+          <div className="orb-core">{(me?.username ?? "O")[0].toUpperCase()}</div>
+        </div>
+        <div className="community-text" data-reveal="" style={{ "--d": "100ms" }}>
+          <span className="eyebrow">{t("Profil", "Profile")}</span>
           <h2>{t("Un profil qui te ressemble.", "A profile that feels like you.")}</h2>
           <p>{t("Badges vérifiables, amis, collections de sites et mods. Tu choisis qui voit chaque partie. Connecte-toi à Firefox Sync dans Orbit et ton compte suit.",
             "Verified badges, friends, site collections and mods. You choose who sees each part. Sign in to Firefox Sync in Orbit and your account follows.")}</p>
           <div className="row wrap">
-            {me ? join : <Link className="btn primary big" to="/register">{t("Créer mon profil", "Create my profile")}</Link>}
-            <Link className="btn big quiet" to="/badges">{t("Voir les badges →", "See badges →")}</Link>
+            {me ? <Link className="btn big" to={`/u/${me.username}`}>{t("Mon profil", "My profile")}</Link> : <Link className="btn big" to="/register">{t("Créer mon profil", "Create my profile")}</Link>}
+            <Link className="btn big quiet" to="/badges">{t("Voir les badges", "See badges")}<Icon name="arrow-right" /></Link>
           </div>
-        </div>
-        <div className="badge-orbit" data-reveal="">
-          {[["rocket", "#f5c518"], ["shield-check", "#ff8d97"], ["heart", "#ff8da5"], ["bug", "#3dd68c"], ["flask-conical", "#f5b841"], ["code", "#7fd1ff"], ["gem", "#c9ccd8"], ["sparkles", "#c4b5ff"]]
-            .map(([ic, c], i) => <span key={ic} className="orb" style={{ "--c": c, "--i": i }}><Icon name={ic} /></span>)}
-          <div className="orb-core">S</div>
         </div>
       </section>
 
       <section className="final" data-reveal="">
-        <Liquid />
-        <h2>{t("Prêt à décoller ?", "Ready for takeoff?")}</h2>
-        <p>{price ? t(`La bêta coûte ${price}, une seule fois. Tes favoris et mots de passe suivent.`, `The beta costs ${price}, once. Your bookmarks and passwords come along.`)
-          : t("Une minute pour l'installer. Tes favoris et mots de passe suivent.", "One minute to install. Your bookmarks and passwords come along.")}</p>
-        {get}
+        <div>
+          <h2>{t("Prêt à décoller ?", "Ready for takeoff?")}</h2>
+          <p>{price ? t(`La bêta coûte ${price}, une seule fois. Tes favoris et mots de passe suivent.`, `The beta costs ${price}, once. Your bookmarks and passwords come along.`)
+            : t("Une minute pour l'installer. Tes favoris et mots de passe suivent.", "One minute to install. Your bookmarks and passwords come along.")}</p>
+        </div>
+        <div className="row wrap">{get_}<Link className="btn big" to="/support">{t("Soutenir le projet", "Support the project")}</Link></div>
       </section>
     </div>
   );

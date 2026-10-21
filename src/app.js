@@ -22,6 +22,7 @@ import reportRoutes from "./routes/reports.js";
 import adminRoutes from "./routes/admin.js";
 import modRoutes, { modAdminRoutes, createZenFetcher, createZenImageFetcher } from "./routes/mods.js";
 import betaRoutes, { licenseRoutes, betaAdminRoutes } from "./routes/beta.js";
+import forumRoutes from "./routes/forum.js";
 import { betaSettings, setKeySecret } from "./services/beta.js";
 
 export const SESSION_COOKIE = "orbit_session";
@@ -155,6 +156,7 @@ export async function buildApp({ cfg, pool, logger = true, mailer, stripe, mozil
     await instance.register(modRoutes, { prefix: "/mods" });
     await instance.register(modAdminRoutes, { prefix: "/admin/mods" });
     await instance.register(betaRoutes, { prefix: "/beta" });
+    await instance.register(forumRoutes, { prefix: "/forum" });
     await instance.register(licenseRoutes, { prefix: "/license" });
     await instance.register(betaAdminRoutes, { prefix: "/admin/beta" });
   };

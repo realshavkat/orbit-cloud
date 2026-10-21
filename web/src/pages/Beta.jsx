@@ -3,7 +3,7 @@ import { t } from "../lib/i18n.js";
 import { get, post } from "../lib/api.js";
 import { useMe } from "../lib/session.js";
 import { fmtMoney } from "../lib/format.js";
-import { Icon, Link, Liquid } from "../components/ui.jsx";
+import { Icon, Link } from "../components/ui.jsx";
 import { useBusy } from "../components/overlay.jsx";
 import { BetaKey } from "../components/BetaKey.jsx";
 
@@ -33,8 +33,7 @@ export default function Beta() {
       {params.get("thanks") && <div className="alert ok"><Icon name="circle-check" />{t("Merci ! Ton accès sera actif dans quelques instants, dès que le paiement est confirmé.", "Thank you! Your access will be active in a moment, once the payment is confirmed.")}</div>}
       {params.get("canceled") && <div className="alert"><Icon name="info" />{t("Paiement annulé : rien n'a été prélevé.", "Payment canceled: nothing was charged.")}</div>}
       <header className="beta-hero">
-        <Liquid />
-        <span className="kicker-line">{t("Bêta pour Windows", "Beta for Windows")}</span>
+        <span className="eyebrow">{t("Bêta pour Windows", "Beta for Windows")}</span>
         <h1>{b.paywall ? t(`La bêta d'Orbit, ${price}.`, `The Orbit beta, ${price}.`) : t("La bêta d'Orbit est gratuite.", "The Orbit beta is free.")}</h1>
         <p>{b.paywall
           ? t("Une seule fois, pour toute la bêta. À la version 1.0, Orbit devient gratuit pour tout le monde.", "Once, for the whole beta. At version 1.0, Orbit becomes free for everyone.")

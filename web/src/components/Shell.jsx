@@ -53,6 +53,7 @@ function AccountMenu({ me }) {
           <Link to={`/u/${me.username}`} role="menuitem"><Icon name="user" />{t("Mon profil", "My profile")}</Link>
           <Link to="/me" role="menuitem"><Icon name="settings" />{t("Mon compte", "Account")}</Link>
           <Link to="/friends" role="menuitem"><Icon name="users" />{t("Amis", "Friends")}</Link>
+          <Link to="/forum/mine" role="menuitem"><Icon name="message-square" />{t("Mes discussions", "My threads")}</Link>
           <Link to="/mods/mine" role="menuitem"><Icon name="palette" />{t("Mes mods", "My mods")}</Link>
           <Link to="/me/payments" role="menuitem"><Icon name="key-round" />{t("Ma clé bêta", "My beta key")}</Link>
           {staff && <Link to="/admin" role="menuitem"><Icon name="layout-dashboard" />{t("Administration", "Admin")}</Link>}
@@ -84,24 +85,27 @@ function useUnread(me) {
 function SearchDialog({ close }) {
   const navigate = useNavigate();
   const [q, setQ] = useState("");
-  const [res, setRes] = useState({ users: [], mods: [] });
+  const [res, setRes] = useState({ users: [], mods: [], threads: [] });
   const [active, setActive] = useState(0);
   useEffect(() => {
     const term = q.trim();
-    if (term.length < 2) return setRes({ users: [], mods: [] });
+    if (term.length < 2) return setRes({ users: [], mods: [], threads: [] });
     const id = setTimeout(async () => {
-      const [u, m] = await Promise.all([
-        get(`/users/search?q=${encodeURIComponent(term)}`).catch(() => ({ users: [] })),
-        get(`/mods?q=${encodeURIComponent(term)}`).catch(() => ({ mods: [] })),
+      const q = encodeURIComponent(term);
+      const [u, m, f] = await Promise.all([
+        get(`/users/search?q=${q}`).catch(() => ({ users: [] })),
+        get(`/mods?q=${q}`).catch(() => ({ mods: [] })),
+        get(`/forum/threads?sort=top&q=${q}`).catch(() => ({ threads: [] })),
       ]);
-      setRes({ users: u.users.slice(0, 5), mods: m.mods.slice(0, 4) });
+      setRes({ users: u.users.slice(0, 4), mods: m.mods.slice(0, 3), threads: f.threads.slice(0, 4) });
       setActive(0);
     }, 180);
     return () => clearTimeout(id);
   }, [q]);
   const items = [
-    ...res.users.map(u => ({ key: `u${u.id}`, to: `/u/${u.username}`, icon: <Avatar user={u} className="avatar xs" />, title: u.display_name || u.username, sub: `@${u.username}` })),
-    ...res.mods.map(m => ({ key: `m${m.slug}`, to: `/mods/${m.slug}`, icon: <span className="search-ic"><Icon name="palette" /></span>, title: m.name, sub: `Mod · @${m.author}` })),
+    ...res.threads.map(f => ({ key: `t${f.id}`, group: "Forum", to: `/forum/t/${f.id}`, icon: <span className="search-ic"><Icon name="message-square" /></span>, title: f.title, sub: `${f.category_name} · ${f.comment_count} ${t("réponses", "replies")}` })),
+    ...res.users.map(u => ({ key: `u${u.id}`, group: t("Membres", "Members"), to: `/u/${u.username}`, icon: <Avatar user={u} className="avatar xs" />, title: u.display_name || u.username, sub: `@${u.username}` })),
+    ...res.mods.map(m => ({ key: `m${m.slug}`, group: "Mods", to: `/mods/${m.slug}`, icon: <span className="search-ic"><Icon name="palette" /></span>, title: m.name, sub: `Mod · @${m.author}` })),
   ];
   const go = item => {
     close();
@@ -110,7 +114,7 @@ function SearchDialog({ close }) {
   return (
     <div className="search-box">
       <label className="search-input"><Icon name="search" />
-        <input autoFocus placeholder={t("Chercher un membre ou un mod", "Search members and mods")} aria-label={t("Rechercher", "Search")} value={q}
+        <input autoFocus placeholder={t("Chercher dans le forum, les membres, les mods", "Search the forum, members and mods")} aria-label={t("Rechercher", "Search")} value={q}
           onChange={e => setQ(e.target.value)} onKeyDown={e => {
             if (e.key == "ArrowDown") (e.preventDefault(), setActive(a => Math.min(items.length - 1, a + 1)));
             if (e.key == "ArrowUp") (e.preventDefault(), setActive(a => Math.max(0, a - 1)));
@@ -120,11 +124,12 @@ function SearchDialog({ close }) {
       </label>
       {q.trim().length >= 2 && (
         <div className="search-results" role="listbox">
-          {items.length ? items.map((it, i) => (
+          {items.length ? items.map((it, i) => [
+            it.group != items[i - 1]?.group && <div key={`g${it.group}`} className="group">{it.group}</div>,
             <button key={it.key} type="button" role="option" aria-selected={i == active} onMouseEnter={() => setActive(i)} onClick={() => go(it)}>
               {it.icon}<span className="sr-text"><b>{it.title}</b><span>{it.sub}</span></span><Icon name="arrow-right" />
-            </button>
-          )) : <p className="search-empty">{t("Aucun résultat.", "No results.")}</p>}
+            </button>,
+          ]) : <p className="search-empty">{t("Aucun résultat.", "No results.")}</p>}
         </div>
       )}
     </div>
@@ -138,7 +143,14 @@ export function Topbar() {
   const unread = useUnread(me);
   const { pathname } = useLocation();
   const [menu, setMenu] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
   useEffect(() => setMenu(false), [pathname]);
+  useEffect(() => {
+    const on = () => setScrolled(scrollY > 8);
+    on();
+    addEventListener("scroll", on, { passive: true });
+    return () => removeEventListener("scroll", on);
+  }, []);
   useEffect(() => {
     const key = e => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() == "k") {
@@ -149,9 +161,9 @@ export function Topbar() {
     document.addEventListener("keydown", key);
     return () => document.removeEventListener("keydown", key);
   }, []);
-  const nav = [["/discover", t("Découvrir", "Discover")], ["/mods", "Mods"], ["/badges", "Badges"], ["/beta", t("Bêta", "Beta")], ["/support", t("Soutenir", "Support")]];
+  const nav = [["/forum", "Forum"], ["/mods", "Mods"], ["/discover", t("Membres", "People")], ["/badges", "Badges"], ["/beta", t("Bêta", "Beta")], ["/support", t("Soutenir", "Support")]];
   return (
-    <header className="top">
+    <header className={`top${scrolled ? " scrolled" : ""}`}>
       <div className="top-in">
         <Link className="brand" to="/"><Logo /><span>Orbit</span></Link>
         <nav className={`nav${menu ? " open" : ""}`} aria-label={t("Principal", "Main")}>
@@ -191,10 +203,11 @@ export const Footer = () => (
       <p className="faint small">{t("Bêta pour Windows. Gratuit pour tous à la version 1.0.", "Beta for Windows. Free for everyone at version 1.0.")}</p>
     </div>
     <nav className="foot-cols" aria-label={t("Liens", "Links")}>
-      <div><h3>{t("Produit", "Product")}</h3><Link to="/beta">{t("Obtenir la bêta", "Get the beta")}</Link><Link to="/mods">Mods</Link><Link to="/#features">{t("Fonctionnalités", "Features")}</Link></div>
-      <div><h3>{t("Communauté", "Community")}</h3><Link to="/discover">{t("Découvrir", "Discover")}</Link><Link to="/badges">Badges</Link><Link to="/support">{t("Soutenir", "Support")}</Link></div>
+      <div><h3>{t("Produit", "Product")}</h3><Link to="/beta">{t("Obtenir la bêta", "Get the beta")}</Link><Link to="/#features">{t("Fonctionnalités", "Features")}</Link><Link to="/mods">Mods</Link></div>
+      <div><h3>Forum</h3><Link to="/forum">{t("Discussions", "Discussions")}</Link><Link to="/forum/suggestions">Suggestions</Link><Link to="/forum/c/help">{t("Aide", "Help")}</Link></div>
+      <div><h3>{t("Communauté", "Community")}</h3><Link to="/discover">{t("Membres", "People")}</Link><Link to="/badges">Badges</Link><Link to="/support">{t("Soutenir", "Support")}</Link></div>
       <div><h3>Orbit</h3><Link to="/terms">{t("Conditions", "Terms")}</Link><Link to="/privacy">{t("Confidentialité", "Privacy")}</Link><a href="https://github.com/realshavkat/orbit" target="_blank" rel="noopener">GitHub</a></div>
     </nav>
-    <div className="foot-bottom"><span>© 2026 Orbit</span><LangSwitch /></div>
+    <div className="foot-bottom"><span className="status-dot">{t("Tous les services fonctionnent", "All systems normal")}</span><span>© 2026 Orbit</span><LangSwitch /></div>
   </footer>
 );

@@ -24,7 +24,7 @@ export function Catalog() {
     ...[...new Set(badges.map(b => b.category))].map(c => [`/badges?f=${c}`, CATEGORY[c] ?? c, c])];
   return (
     <div className="stack" style={{ gap: 36, maxWidth: 980 }}>
-      <PageHero liquid style={{ marginBottom: 0 }} eyebrow="Badges" title={t("Gagnés, jamais achetés.", "Earned, never bought.")}
+      <PageHero style={{ marginBottom: 0 }} eyebrow="Badges" title={t("Gagnés, jamais achetés.", "Earned, never bought.")}
         sub={<>{t("Chaque badge correspond à un critère réel et ne donne aucun droit.", "Each badge matches a real criterion and grants no rights.")}
           {me && <> {t("Tu en as ", "You have ")}<b style={{ color: "var(--ink)", fontWeight: 600 }}>{mine.size} / {badges.length}</b>.</>}</>} />
       <Tabs items={tabs} current={filter} label={t("Filtrer", "Filter")} />

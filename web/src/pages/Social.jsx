@@ -19,7 +19,7 @@ export function Discover() {
   ].filter(([, , list]) => list.length);
   return (
     <>
-      <PageHero liquid eyebrow={t("Communauté", "Community")} title={t("Découvrir", "Discover")} sub={t("Des membres d'Orbit, leurs sites et leurs collections. Seuls ceux qui ont choisi d'apparaître ici sont affichés.", "Orbit members, their sites and collections. Only people who chose to appear here are shown.")} />
+      <PageHero eyebrow={t("Communauté", "Community")} title={t("Découvrir", "Discover")} sub={t("Des membres d'Orbit, leurs sites et leurs collections. Seuls ceux qui ont choisi d'apparaître ici sont affichés.", "Orbit members, their sites and collections. Only people who chose to appear here are shown.")} />
       {blocks.length || d.collections.length ? (
         <div className="stack" style={{ gap: 40 }}>
           {blocks.map(([title, sub, list]) => (
@@ -134,6 +134,11 @@ const NOTIF = {
     : n.data.approved ? t(`Ton mod ${n.data.name} ${n.data.version} est publié.`, `Your mod ${n.data.name} ${n.data.version} is listed.`)
       : t(`Ton mod ${n.data.name} ${n.data.version} a été refusé : ${n.data.note}`, `Your mod ${n.data.name} ${n.data.version} was rejected: ${n.data.note}`), `/mods/${n.data.mod}`],
   beta_key: () => ["download", t("Ta clé bêta d'Orbit est prête. Entre-la dans l'application.", "Your Orbit beta key is ready. Enter it in the app."), "/me/payments"],
+  forum_reply: n => ["reply", t(`@${n.data.username} a répondu dans « ${n.data.title} »`, `@${n.data.username} replied in "${n.data.title}"`), `/forum/t/${n.data.thread}#replies`],
+  suggestion_status: n => {
+    const label = { open: t("ouverte", "open"), planned: t("prévue", "planned"), in_progress: t("en cours", "in progress"), done: t("livrée", "shipped"), declined: t("refusée", "declined") }[n.data.status] ?? n.data.status;
+    return ["lightbulb", t(`Ta suggestion « ${n.data.title} » est ${label}.`, `Your suggestion "${n.data.title}" is now ${label}.`), `/forum/t/${n.data.thread}`];
+  },
   news: n => ["info", n.data.title ?? t("Actualité d'Orbit", "Orbit news"), null],
 };
 

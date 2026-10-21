@@ -41,7 +41,7 @@ export function Store() {
   };
   return (
     <div className="stack" style={{ gap: 32 }}>
-      <PageHero liquid style={{ marginBottom: 0 }} eyebrow="Orbit Mods" title={t("Fais d'Orbit le tien.", "Make Orbit yours.")}
+      <PageHero style={{ marginBottom: 0 }} eyebrow="Orbit Mods" title={t("Fais d'Orbit le tien.", "Make Orbit yours.")}
         sub={t("Change l'apparence d'Orbit en un clic. Chaque mod est vérifié par l'équipe Orbit avant d'être publié.", "Change how Orbit looks and feels, one click to install. Every mod is checked by the Orbit team before it is listed.")}>
         <Link className="btn" to={me ? "/mods/submit" : "/login?next=/mods/submit"}><Icon name="upload" />{t("Proposer un mod", "Submit a mod")}</Link>
       </PageHero>

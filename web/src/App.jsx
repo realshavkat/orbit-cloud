@@ -3,7 +3,8 @@ import { session } from "./lib/session.js";
 import { t } from "./lib/i18n.js";
 import { Topbar, Footer, SLOGAN, LangSwitch } from "./components/Shell.jsx";
 import { Overlays } from "./components/overlay.jsx";
-import { ErrorBox, Spinner, NotFound, Liquid, Logo, Link } from "./components/ui.jsx";
+import { ErrorBox, Spinner, NotFound, Logo, Link, Icon } from "./components/ui.jsx";
+import Cosmos from "./components/Cosmos.jsx";
 import Landing from "./pages/Landing.jsx";
 import * as Auth from "./pages/Auth.jsx";
 import * as Profile from "./pages/Profile.jsx";
@@ -14,6 +15,7 @@ import * as Support from "./pages/Support.jsx";
 import * as Beta from "./pages/Beta.jsx";
 import * as Legal from "./pages/Legal.jsx";
 import * as Mods from "./pages/Mods.jsx";
+import * as Forum from "./pages/Forum.jsx";
 
 export function requireMe({ request }) {
   const url = new URL(request.url);
@@ -31,6 +33,8 @@ function Layout({ variant }) {
   const nav = useNavigation();
   return (
     <>
+      <Cosmos />
+      {nav.state == "loading" && <div className="progress" />}
       <Topbar />
       <main className={variant} aria-busy={nav.state == "loading"}><Outlet /></main>
       <Footer />
@@ -43,11 +47,15 @@ function Layout({ variant }) {
 function AuthLayout() {
   return (
     <div className="auth">
+      <Cosmos />
       <aside className="auth-side">
-        <Liquid />
-        <Link className="brand" to="/"><Logo size={30} /><span>Orbit</span></Link>
-        <div className="auth-pitch"><h2>{SLOGAN()}</h2>
-          <p>{t("Un compte pour ton profil, tes badges, tes mods et ta clé bêta.", "One account for your profile, badges, mods and beta key.")}</p></div>
+        <Link className="brand" to="/"><Logo size={28} /><span>Orbit</span></Link>
+        <div className="auth-pitch"><span className="eyebrow">{t("Compte Orbit", "Orbit account")}</span><h2>{SLOGAN()}</h2>
+          <p>{t("Un seul compte pour le forum, ton profil, tes badges, tes mods et ta clé bêta.", "One account for the forum, your profile, badges, mods and beta key.")}</p>
+          <ul className="auth-points">
+            {[["message-square", t("Discute et vote dans le forum", "Discuss and vote in the forum")], ["palette", t("Publie et installe des mods vérifiés", "Publish and install reviewed mods")],
+              ["refresh-cw", t("Lié à Firefox Sync dans Orbit", "Linked to Firefox Sync in Orbit")]].map(([ic, text]) => <li key={ic}><Icon name={ic} />{text}</li>)}
+          </ul></div>
         <LangSwitch />
       </aside>
       <main className="auth-main"><div className="auth-form"><Outlet /></div></main>
@@ -60,6 +68,7 @@ function AuthLayout() {
 function AdminLayout() {
   return (
     <>
+      <Cosmos quiet />
       <Outlet />
       <Overlays />
       <ScrollRestoration />
@@ -104,6 +113,12 @@ export const router = createBrowserRouter([
       { path: "/notifications", element: <Social.Notifications />, loader: guard(Social.notificationsLoader) },
       { path: "/sites/:domain", element: <Social.Site />, loader: Social.siteLoader },
       { path: "/share", element: <Social.Share />, loader: guard() },
+      { path: "/forum", element: <Forum.Home />, loader: Forum.homeLoader },
+      { path: "/forum/c/:slug", element: <Forum.Home />, loader: Forum.homeLoader },
+      { path: "/forum/suggestions", element: <Forum.Suggestions />, loader: Forum.suggestionsLoader },
+      { path: "/forum/t/:id", element: <Forum.Thread />, loader: Forum.threadLoader },
+      { path: "/forum/new", element: <Forum.Compose />, loader: guard(Forum.composeLoader) },
+      { path: "/forum/mine", element: <Forum.Mine />, loader: guard(Forum.mineLoader) },
       { path: "/mods", element: <Mods.Store />, loader: Mods.storeLoader },
       { path: "/mods/submit", element: <Mods.Submit />, loader: guard() },
       { path: "/mods/mine", element: <Mods.Mine />, loader: guard(Mods.mineLoader) },

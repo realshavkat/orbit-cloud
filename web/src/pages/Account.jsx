@@ -336,6 +336,7 @@ function NotificationsTab({ me }) {
   };
   const types = [["friend_request", t("Demandes d'amis", "Friend requests")], ["friend_accepted", t("Demandes acceptées", "Accepted requests")], ["badge", t("Nouveaux badges", "New badges")],
     ["support_badge", t("Badges de soutien", "Supporter badges")], ["mod_review", t("Vérification de mes mods", "Reviews of my mods")], ["report_update", t("Suivi de mes signalements", "Updates on my reports")],
+    ["forum_reply", t("Réponses dans le forum", "Forum replies")], ["suggestion_status", t("Statut de mes suggestions", "Status of my suggestions")],
     ["news", t("Actualités d'Orbit", "Orbit news")]];
   return (
     <>

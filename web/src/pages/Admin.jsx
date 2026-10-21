@@ -618,7 +618,10 @@ SECTIONS.reports = {
           <Table cols={[t("Cible", "Target"), t("Motif", "Reason"), t("Détails", "Details"), t("Par", "By"), "Date", ""]}>
             {data.reports.map(r => (
               <tr key={r.id}>
-                <td>{r.target_type == "user" ? <Link className="link" to={perms.has("users.read") ? `/admin/users/${r.target_id}` : `/u/${r.target_label}`}>{r.target_label ?? "?"}</Link> : <span>Collection : {r.target_label ?? "?"}</span>}</td>
+                <td>{r.target_type == "user" ? <Link className="link" to={perms.has("users.read") ? `/admin/users/${r.target_id}` : `/u/${r.target_label}`}>{r.target_label ?? "?"}</Link>
+                  : r.thread_id ? <span className="stack" style={{ gap: 2 }}><span className="label">{r.target_type == "post" ? t("Réponse du forum", "Forum reply") : t("Discussion", "Thread")}</span>
+                    <Link className="link" to={`/forum/t/${r.thread_id}${r.target_type == "post" ? `#p-${r.target_id}` : ""}`}>{r.target_label ?? "?"}</Link></span>
+                    : <span>Collection : {r.target_label ?? "?"}</span>}</td>
                 <td>{r.reason}</td><td className="muted" style={{ maxWidth: 260 }}>{r.details ?? ""}</td><td className="muted">{r.reporter ?? "—"}</td><td className="muted">{fmtDate(r.created_at)}</td>
                 <td style={{ textAlign: "right" }}>{perms.has("reports.handle") && ["open", "reviewing"].includes(r.status) ? (
                   <div className="row" style={{ justifyContent: "flex-end" }}>

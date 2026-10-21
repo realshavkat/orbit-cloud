@@ -378,7 +378,10 @@ export default async function adminRoutes(app) {
       `SELECT r.id, r.target_type, r.target_id, r.reason, r.details, r.status, r.resolution, r.created_at, r.updated_at,
               rep.username AS reporter, h.username AS handled_by,
               CASE WHEN r.target_type = 'user' THEN (SELECT username FROM users WHERE id = r.target_id)
-                   ELSE (SELECT title FROM site_collections WHERE id = r.target_id) END AS target_label
+                   WHEN r.target_type = 'thread' THEN (SELECT title FROM forum_threads WHERE id = r.target_id)
+                   WHEN r.target_type = 'post' THEN (SELECT left(body, 80) FROM forum_posts WHERE id = r.target_id)
+                   ELSE (SELECT title FROM site_collections WHERE id = r.target_id) END AS target_label,
+              CASE WHEN r.target_type = 'post' THEN (SELECT thread_id FROM forum_posts WHERE id = r.target_id) WHEN r.target_type = 'thread' THEN r.target_id END AS thread_id
          FROM reports r LEFT JOIN users rep ON rep.id = r.reporter_id LEFT JOIN users h ON h.id = r.handled_by
         WHERE r.status = $1 ORDER BY r.created_at LIMIT 200`, [status]);
     return { reports: rows };

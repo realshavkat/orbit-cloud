@@ -1,4 +1,4 @@
-import { cloneElement, isValidElement, useId, useMemo } from "react";
+import { cloneElement, isValidElement, useId } from "react";
 import { Link as RouterLink } from "react-router";
 import { t, errorText } from "../lib/i18n.js";
 import { THEME, RARITY, localBadge } from "../lib/format.js";
@@ -10,23 +10,6 @@ export const Icon = ({ name, className = "i", style }) => (
 );
 
 export const Logo = ({ size = 28 }) => <img src="/assets/logo.svg" alt="" width={size} height={Math.round((size * 251) / 331)} />;
-
-let liquidN = 0;
-export function Liquid({ className = "liquid", a = "#5c7cff", b = "#0e1a3a" }) {
-  const id = useMemo(() => `lq${liquidN++}`, []);
-  return (
-    <svg className={className} viewBox="0 0 1200 700" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-      <defs>
-        <linearGradient id={`${id}a`} x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor={a} /><stop offset="1" stopColor={b} stopOpacity="0" /></linearGradient>
-        <filter id={`${id}b`} x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="48" /></filter>
-      </defs>
-      <g filter={`url(#${id}b)`} fill="none" stroke={`url(#${id}a)`} strokeLinecap="round">
-        <path className="rib1" d="M-160 560 C 160 260, 460 200, 620 400 S 980 720, 1360 440" strokeWidth="170" />
-        <path className="rib2" d="M-120 120 C 260 0, 520 220, 780 90 S 1160 40, 1320 140" strokeWidth="90" opacity=".6" />
-      </g>
-    </svg>
-  );
-}
 
 export function Avatar({ user, className = "avatar" }) {
   const url = user?.avatar_url ?? (user?.avatar_media_id ? `/api/v1/users/media/${user.avatar_media_id}` : null);
@@ -102,9 +85,8 @@ export function PersonCard({ user, extra }) {
   );
 }
 
-export const PageHero = ({ eyebrow, title, sub, children, liquid, style }) => (
-  <header className={`page-hero${liquid ? " with-liquid" : ""}`} style={style}>
-    {liquid && <Liquid />}
+export const PageHero = ({ eyebrow, title, sub, children, style }) => (
+  <header className="page-hero" style={style}>
     <div className="ph-text">{eyebrow && <span className="eyebrow">{eyebrow}</span>}<h1>{title}</h1>{sub && <p>{sub}</p>}</div>
     {children && <div className="ph-actions">{children}</div>}
   </header>
@@ -115,7 +97,6 @@ export const PageHead = PageHero;
 export function NotFound() {
   return (
     <div className="not-found">
-      <Liquid />
       <span className="nf-code">404</span>
       <h1>{t("Cette page a quitté l'orbite.", "This page left orbit.")}</h1>
       <p>{t("Le lien est peut-être ancien, ou la page a été déplacée.", "The link may be old, or the page has moved.")}</p>
